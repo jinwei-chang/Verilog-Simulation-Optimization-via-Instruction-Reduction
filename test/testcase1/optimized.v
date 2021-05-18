@@ -1,4 +1,6 @@
 module dut (out, in);
+	output[9:0] out;
+	input[19:0] in;
 endmodule
 
 module tb();

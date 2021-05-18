@@ -1,6 +1,9 @@
 {
     "files.associations": {
         "*.php": "php",
-        "iosfwd": "cpp"
+        "iosfwd": "cpp",
+        "iostream": "cpp",
+        "ostream": "cpp",
+        "new": "cpp"
     }
 }
