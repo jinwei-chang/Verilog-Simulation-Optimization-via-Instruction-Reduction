@@ -38,8 +38,6 @@ struct Component{
         XOR
     };
 
-    
-
     int _MSB;
     int _LSB;
     int _ID;
