@@ -1,6 +1,7 @@
 #include <bits/stdc++.h>
 using namespace std;
 
+#define RELEASE
 #define DEBUG
 
 struct Component{
@@ -17,9 +18,65 @@ struct Component{
         _MSB(MSB),
         _LSB(LSB),
         _left(left),
-        _right(right)
+        _right(right),
+        _enable(true)
     {
         
+    }
+
+    string make_inst(){
+        string inst;
+        if(_type == TYPE::NOT){
+            inst += "~";
+        }
+
+        if(_type == TYPE::BIT){
+            inst += "1'b";
+            if(_ID == 0){
+                inst += to_string(_ID);
+            }
+            else{
+                inst += to_string(_ID);
+            }
+        }
+        else if(_type == TYPE::IN){
+            inst += "in[";
+            inst += to_string(_ID);
+            inst += "]";
+        }
+        else if(_type == TYPE::OUT){
+            inst += "out[";
+            inst += to_string(_ID);
+            inst += "]";
+        }
+        else if(_type == TYPE::WIRE){
+            inst += "xformtmp";
+            inst += to_string(_ID);
+        }
+        else if(_type == TYPE::OR){
+            inst += _left->make_inst();
+            inst += " | ";
+            inst += _right->make_inst();
+        }
+        else if(_type == TYPE::AND){
+            inst += _left->make_inst();
+            inst += " & ";
+            inst += _right->make_inst();
+        }
+        else if(_type == TYPE::XOR){
+            inst += _left->make_inst();
+            inst += " ^ ";
+            inst += _right->make_inst();
+        }
+
+        return inst;
+    }
+
+    string make_assign_inst(){
+        string inst;
+        inst += "assign " + make_inst() + " = " + _left->make_inst() + ";";
+
+        return inst;
     }
 
     Component *_left;
@@ -41,6 +98,8 @@ struct Component{
     int _MSB;
     int _LSB;
     int _ID;
+
+    bool _enable;
 };
 
 unordered_map<int, const char*> TypeToString = {
@@ -55,16 +114,21 @@ unordered_map<int, const char*> TypeToString = {
     {Component::TYPE::XOR, "XOR"},
 };
 
+// for debug
+
 ostream &operator<<(ostream &out, const Component &right){
     out << "<";
     out << TypeToString[right._type]; 
     out << "> ";
     out << right._ID;
+    out << "\n";
+
     if(right._left != nullptr){
-        out << "\n\t" << *right._left;
+        out << *right._left;
     }
+
     if(right._right != nullptr){
-        out << "\n\t" << *right._right;
+        out << *right._right;
     }
 
     return out;
@@ -77,10 +141,71 @@ static unordered_map<int, Component*> wireList;
 static unordered_map<int, Component*> inList;
 static unordered_map<int, Component*> outList;
 
+void assign(Component *assigned, string leftItem, string rightItem = ""){
+    string &item = leftItem;
+
+    if(item == "1'b1" || item == "~1'b0"){
+        assigned->_left = &bit1;
+    }
+    else if(item == "1'b0" || item == "~1'b1"){
+        assigned->_left = &bit0;
+    }
+    else if(item.find("origtmp") == 0){
+        assigned->_left = wireList[stoi(item.substr(7))];
+    }
+    else if(item.find("~origtmp") == 0){
+        assigned = assigned->_left = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr);
+        assigned->_left = wireList[stoi(item.substr(8))];
+    }
+    else if(item.find("in") == 0){
+        int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
+        assigned->_left = inList[idx];
+    }
+    else if(item.find("~in") == 0){
+        assigned = assigned->_left = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr);
+        int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
+        assigned->_left = inList[idx];
+    }
+    else{
+        clog << "<?> " << item << "\n";
+    }
+
+    item = rightItem;
+    if(item != ""){
+        if(item == "1'b1" || item == "~1'b0"){
+            assigned->_right = &bit1;
+        }
+        else if(item == "1'b0" || item == "~1'b1"){
+            assigned->_right = &bit0;
+        }
+        else if(item.find("origtmp") == 0){
+            assigned->_right = wireList[stoi(item.substr(7))];
+        }
+        else if(item.find("~origtmp") == 0){
+            assigned = assigned->_right = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr);
+            assigned->_right = wireList[stoi(item.substr(8))];
+        }
+        else if(item.find("in") == 0){
+            int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
+            assigned->_right = inList[idx];
+        }
+        else if(item.find("~in") == 0){
+            assigned = assigned->_right = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr);
+            int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
+            assigned->_right = inList[idx];
+        }
+        else{
+            clog << "<?> " << item << "\n";
+        }
+    }
+}
+
 void parser(ifstream &in, ofstream &out){
     string line;
     bool opt = false;
     while(getline(in, line)){
+        // clog << line << endl;
+
         stringstream ss(line);
         string kw;
 
@@ -119,6 +244,7 @@ void parser(ifstream &in, ofstream &out){
         }
         else if(kw == "wire"){
             string val; ss >> val;
+            // origtmp#
             int id = stoi(val.substr(7));
 
             wireList.insert(make_pair( id, new Component(Component::TYPE::WIRE, id, 0, 0, nullptr, nullptr) ));
@@ -126,14 +252,16 @@ void parser(ifstream &in, ofstream &out){
         else if(kw == "assign"){
             string lhs; ss >> lhs;
             Component *L;
-            int assign;
+            
             if(lhs.substr(0, 3) == "out"){
-                assign = stoi(lhs.substr(lhs.find('[') + 1, lhs.find(']') - lhs.find('[') - 1));
-                L = outList[assign];
+                // out[#]
+                int idx = stoi(lhs.substr(lhs.find('[') + 1, lhs.find(']') - lhs.find('[') - 1));
+                L = outList[idx];
             }
             else{
-                assign = stoi(lhs.substr(7));
-                L = wireList[assign];
+                // origtmp#
+                int idx = stoi(lhs.substr(7));
+                L = wireList[idx];
             }
             
             // clog << "assign: " << assign << "\n";
@@ -149,26 +277,13 @@ void parser(ifstream &in, ofstream &out){
             split >> op;
             split >> item2;
 
+            // clog << item1 << "\n";
+            // clog << op << "\n";
+            // clog << item2 << "\n";
+
             if(op == ""){
-                if(item1.substr(0, 3) == "1'b"){
-                    if(item1.substr(3) == "0"){
-                        L->_left = &bit0;
-                    }
-                    else if(item1.substr(3) == "1"){
-                        L->_left = &bit1;
-                    }
-                }
-                else if(item1.substr(0, 4) == "~1'b"){
-                    if(item1.substr(4) == "0"){
-                        L->_left = &bit1;
-                    }
-                    else if(item1.substr(4) == "1"){
-                        L->_left = &bit0;
-                    }
-                }
-                else{
-                    clog << "?" << "\n";
-                }
+                // clog << "<log> none op" << endl;
+                assign(L, item1);
             }
             else{
                 Component *opr;
@@ -182,52 +297,10 @@ void parser(ifstream &in, ofstream &out){
                     opr = new Component(Component::TYPE::XOR, 0, 0, 0, nullptr, nullptr);
                 }
 
-                if(item1.substr(0, 3) == "1'b"){
-                    if(item1.substr(3) == "0"){
-                        opr->_left = &bit0;
-                    }
-                    else if(item1.substr(3) == "1"){
-                        opr->_left = &bit1;
-                    }
-                }
-                else if(item1.substr(0, 4) == "~1'b"){
-                    if(item1.substr(4) == "0"){
-                        opr->_left = &bit1;
-                    }
-                    else if(item1.substr(4) == "1"){
-                        opr->_left = &bit0;
-                    }
-                }
-                else{
-                    clog << "?" << "\n";
-                }
-
-                if(item2.substr(0, 3) == "1'b"){
-                    if(item2.substr(3) == "0"){
-                        opr->_right = &bit0;
-                    }
-                    else if(item2.substr(3) == "1"){
-                        opr->_right = &bit1;
-                    }
-                }
-                else if(item2.substr(0, 4) == "~1'b"){
-                    if(item2.substr(4) == "0"){
-                        opr->_right = &bit1;
-                    }
-                    else if(item2.substr(4) == "1"){
-                        opr->_right = &bit0;
-                    }
-                }
-                else{
-                    clog << "?" << "\n";
-                }
+                assign(opr, item1, item2);
 
                 L->_left = opr;
             }
-
-            // clog << item1 << "\n";
-            // clog << op << "\n";
-            // clog << item2 << "\n";
 
         }
         else if(kw == "endmodule" && !opt){
@@ -242,7 +315,15 @@ void parser(ifstream &in, ofstream &out){
             //* optimize
 
             //* output result
-            
+            for(auto &it: wireList){
+                out << "\t" << "wire xformtmp" << it.second->_ID << ";\n";
+            }
+            for(auto &it: outList){
+                out << "\t" << it.second->make_assign_inst() << "\n";
+            }
+            for(auto &it: wireList){
+                out << "\t" << it.second->make_assign_inst() << "\n";
+            }
 
             out << line << "\n";
         }
@@ -253,6 +334,12 @@ void parser(ifstream &in, ofstream &out){
 }
 
 int main(int argc, char **argv){
+    #ifdef RELEASE
+    #elif DEBUG
+    #else
+        return EXIT_FAILURE
+    #endif
+
     //* input original file
     ifstream fori(argv[1]);
     //* output optimized file
