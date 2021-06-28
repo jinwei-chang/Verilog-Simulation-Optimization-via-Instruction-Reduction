@@ -1,0 +1,29 @@
+<original>
+port: 30
+assign_select: 82
+evaluation: 0.365854
+<optimized>
+port: 30
+assign_select: 72
+evaluation: 0.416667
+finish testcase1
+
+<original>
+port: 80
+assign_select: 194
+evaluation: 0.412371
+<optimized>
+port: 80
+assign_select: 180
+evaluation: 0.444444
+finish testcase2
+
+<original>
+port: 230
+assign_select: 566
+evaluation: 0.40636
+<optimized>
+port: 230
+assign_select: 515
+evaluation: 0.446602
+finish testcase3

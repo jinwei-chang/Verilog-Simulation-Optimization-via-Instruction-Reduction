@@ -41,11 +41,6 @@ struct Component{
         Component *cur = this;
         string inst;
 
-        if(cur->_type == TYPE::NOT){
-            inst += "~";
-            cur = cur->_left;
-        }
-
         if(cur->_type == TYPE::BIT){
             inst += "1'b";
             if(cur->_ID == 0){
@@ -68,6 +63,10 @@ struct Component{
         else if(cur->_type == TYPE::WIRE){
             inst += "xformtmp";
             inst += to_string(cur->_ID);
+        }
+        else if(cur->_type == TYPE::NOT){
+            inst += "~";
+            inst += cur->_left->make_inst();
         }
         else if(cur->_type == TYPE::OR){
             inst += cur->_left->make_inst();
@@ -248,134 +247,139 @@ void assign(Component *assigned, string leftItem, string rightItem = ""){
 }
 
 void post_order_reduction(Component *cur){
-        if(cur->_type == Component::TYPE::BIT || cur->_type == Component::TYPE::IN)
-            return;
-        
-        if(cur->_left != nullptr){
-            post_order_reduction(cur->_left);
-        }
-        if(cur->_right != nullptr){
-            post_order_reduction(cur->_right);
-        }
+    if(cur->_type == Component::TYPE::BIT || cur->_type == Component::TYPE::IN)
+        return;
+    
+    if(cur->_left != nullptr){
+        post_order_reduction(cur->_left);
+    }
+    if(cur->_right != nullptr){
+        post_order_reduction(cur->_right);
+    }
 
-        if(cur->_type == Component::TYPE::OUT){
+    if(cur->_type == Component::TYPE::OUT){
 
-        }
-        else if(cur->_type == Component::TYPE::WIRE){
-            if(cur->_parent != nullptr){
-                if(cur->_left->_type == Component::TYPE::BIT){
-                    if(cur->_parent->_left == cur){
-                        cur->_parent->_left = cur->_left;
-                    }
-                    else if(cur->_parent->_right == cur){
-                        cur->_parent->_right = cur->_left;
-                    }
-                }
-                else if(cur->_left->_type == Component::TYPE::IN){
-                    if(cur->_parent->_left == cur){
-                        cur->_parent->_left = cur->_left;
-                    }
-                    else if(cur->_parent->_right == cur){
-                        cur->_parent->_right = cur->_left;
-                    }
-                }
-                else if(cur->_left->_type == Component::TYPE::WIRE){
-                    if(cur->_parent->_left == cur){
-                        cur->_parent->_left = cur->_left;
-                    }
-                    else if(cur->_parent->_right == cur){
-                        cur->_parent->_right = cur->_left;
-                    }
-                }
-                else if(cur->_left->_type == Component::TYPE::NOT){
-                    if(cur->_parent->_left == cur){
-                        cur->_parent->_left = cur->_left;
-                        cur->_left = cur;
-                    }
-                    else if(cur->_parent->_right == cur){
-                        cur->_parent->_right = cur->_left;
-                        cur->_left = cur;
-                    }
-                }
-            }
-            
-        }
-        else if(cur->_type == Component::TYPE::NOT){
+    }
+    else if(cur->_type == Component::TYPE::WIRE){
+        if(cur->_parent != nullptr){
             if(cur->_left->_type == Component::TYPE::BIT){
-                if(*cur->_left == bit0){
-                    cur->_parent->_left = &bit1;
+                if(cur->_parent->_left == cur){
+                    cur->_parent->_left = cur->_left;
                 }
-                else if(*cur->_left == bit1){
-                    cur->_parent->_left = &bit0;
+                else if(cur->_parent->_right == cur){
+                    cur->_parent->_right = cur->_left;
                 }
             }
+            else if(cur->_left->_type == Component::TYPE::IN){
+                if(cur->_parent->_left == cur){
+                    cur->_parent->_left = cur->_left;
+                }
+                else if(cur->_parent->_right == cur){
+                    cur->_parent->_right = cur->_left;
+                }
+            }
+            else if(cur->_left->_type == Component::TYPE::WIRE){
+                if(cur->_parent->_left == cur){
+                    cur->_parent->_left = cur->_left;
+                }
+                else if(cur->_parent->_right == cur){
+                    cur->_parent->_right = cur->_left;
+                }
+            }
+            // ! do not mix unary and binary
+            // else if(cur->_left->_type == Component::TYPE::NOT){
+            //     if(cur->_parent->_left == cur){
+            //         cur->_parent->_left = cur->_left;
+            //         cur->_left = cur;
+            //     }
+            //     else if(cur->_parent->_right == cur){
+            //         cur->_parent->_right = cur->_left;
+            //         cur->_left = cur;
+            //     }
+            // }
         }
-        else if(cur->_type == Component::TYPE::OR){
-            if(*cur->_left == bit1 || *cur->_right == bit1){
+        
+    }
+    else if(cur->_type == Component::TYPE::NOT){
+        if(cur->_left->_type == Component::TYPE::BIT){
+            if(*cur->_left == bit0){
                 cur->_parent->_left = &bit1;
-            }
-            else if(*cur->_left == bit0){
-                cur->_parent->_left = cur->_right;
-            }
-            else if(*cur->_right == bit0){
-                cur->_parent->_left = cur->_left;
-            }
-            else if(
-                *cur->_left == bit0 && *cur->_right == bit1 ||
-                *cur->_left == bit1 && *cur->_right == bit0 ||
-                *cur->_left == bit1 && *cur->_right == bit1
-                ){
-                    cur->_parent->_left = &bit1;
-            }
-            else if(*cur->_left == bit0 && *cur->_right == bit0){
-                cur->_parent->_left = &bit0;
-            }
-            else if(*cur->_left == *cur->_right){
-                cur->_parent->_left = cur->_left;
-            }
-        }
-        else if(cur->_type == Component::TYPE::AND){
-            if(*cur->_left == bit0 || *cur->_right == bit0){
-                cur->_parent->_left = &bit0;
             }
             else if(*cur->_left == bit1){
-                cur->_parent->_left = cur->_right;
-            }
-            else if(*cur->_right == bit1){
-                cur->_parent->_left = cur->_left;
-            }
-            else if(
-                *cur->_left == bit0 && *cur->_right == bit0 ||
-                *cur->_left == bit0 && *cur->_right == bit1 ||
-                *cur->_left == bit1 && *cur->_right == bit0
-                ){
-                    cur->_parent->_left = &bit0;
-            }
-            else if(*cur->_left == bit1 && *cur->_right == bit1){
-                cur->_parent->_left = &bit1;
-            }
-            else if(*cur->_left == *cur->_right){
-                cur->_parent->_left = cur->_left;
-            }
-        }
-        else if(cur->_type == Component::TYPE::XOR){
-            if(
-                *cur->_left == bit0 && *cur->_right == bit1 ||
-                *cur->_left == bit1 && *cur->_right == bit0
-                ){
-                    cur->_parent->_left = &bit1;
-            }
-            else if(*cur->_left == bit0){
-                cur->_parent->_left = cur->_right;
-            }
-            else if(*cur->_right == bit0){
-                cur->_parent->_left = cur->_left;
-            }
-            else if(*cur->_left == *cur->_right){
                 cur->_parent->_left = &bit0;
             }
         }
     }
+    else if(cur->_type == Component::TYPE::OR){
+        if(*cur->_left == bit1 || *cur->_right == bit1){
+            cur->_parent->_left = &bit1;
+        }
+        else if(*cur->_left == bit0){
+            cur->_parent->_left = cur->_right;
+        }
+        else if(*cur->_right == bit0){
+            cur->_parent->_left = cur->_left;
+        }
+        else if(
+            *cur->_left == bit0 && *cur->_right == bit1 ||
+            *cur->_left == bit1 && *cur->_right == bit0 ||
+            *cur->_left == bit1 && *cur->_right == bit1
+            ){
+                cur->_parent->_left = &bit1;
+        }
+        else if(*cur->_left == bit0 && *cur->_right == bit0){
+            cur->_parent->_left = &bit0;
+        }
+        else if(*cur->_left == *cur->_right){
+            cur->_parent->_left = cur->_left;
+        }
+    }
+    else if(cur->_type == Component::TYPE::AND){
+        if(*cur->_left == bit0 || *cur->_right == bit0){
+            cur->_parent->_left = &bit0;
+        }
+        else if(*cur->_left == bit1){
+            cur->_parent->_left = cur->_right;
+        }
+        else if(*cur->_right == bit1){
+            cur->_parent->_left = cur->_left;
+        }
+        else if(
+            *cur->_left == bit0 && *cur->_right == bit0 ||
+            *cur->_left == bit0 && *cur->_right == bit1 ||
+            *cur->_left == bit1 && *cur->_right == bit0
+            ){
+                cur->_parent->_left = &bit0;
+        }
+        else if(*cur->_left == bit1 && *cur->_right == bit1){
+            cur->_parent->_left = &bit1;
+        }
+        else if(*cur->_left == *cur->_right){
+            cur->_parent->_left = cur->_left;
+        }
+    }
+    else if(cur->_type == Component::TYPE::XOR){
+        if(
+            *cur->_left == bit0 && *cur->_right == bit1 ||
+            *cur->_left == bit1 && *cur->_right == bit0
+            ){
+                cur->_parent->_left = &bit1;
+        }
+        else if(*cur->_left == bit0){
+            cur->_parent->_left = cur->_right;
+        }
+        else if(*cur->_right == bit0){
+            cur->_parent->_left = cur->_left;
+        }
+        else if(*cur->_left == *cur->_right){
+            cur->_parent->_left = &bit0;
+        }
+    }
+}
+
+void expression_combination(){
+    
+}
 
 void parser(ifstream &in, ofstream &out){
     string line;
