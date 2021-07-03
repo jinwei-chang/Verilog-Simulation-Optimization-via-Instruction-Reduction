@@ -1,8 +1,8 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#define RELEASE
-// #define DEBUG
+// #define RELEASE
+#define DEBUG
 
 static unordered_set<int> wireOutList;
 
@@ -14,7 +14,8 @@ struct Component{
         int LSB = 0,
         Component *left = nullptr,
         Component *right = nullptr,
-        Component *parent = nullptr
+        Component *parent = nullptr,
+        string bitset = ""
     ) : 
         _type(type),
         _ID(ID),
@@ -23,9 +24,9 @@ struct Component{
         _left(left),
         _right(right),
         _parent(parent),
+        _bitset(bitset),
         _enable(true)
     {
-        
     }
 
     bool operator==(const Component &right) const{
@@ -42,13 +43,8 @@ struct Component{
         string inst;
 
         if(cur->_type == TYPE::BIT){
-            inst += "1'b";
-            if(cur->_ID == 0){
-                inst += to_string(cur->_ID);
-            }
-            else{
-                inst += to_string(cur->_ID);
-            }
+            inst += to_string(cur->_MSB - cur->_LSB + 1) + "'b";
+            inst += cur->_bitset;
         }
         else if(cur->_type == TYPE::IN){
             inst += "in[";
@@ -57,7 +53,12 @@ struct Component{
         }
         else if(cur->_type == TYPE::OUT){
             inst += "out[";
-            inst += to_string(cur->_ID);
+            if(cur->_MSB == cur->_LSB){
+                inst += to_string(cur->_MSB);
+            }
+            else{
+                inst += to_string(cur->_MSB) + ":" + to_string(cur->_LSB);;
+            }
             inst += "]";
         }
         else if(cur->_type == TYPE::WIRE){
@@ -138,6 +139,8 @@ struct Component{
     int _LSB;
     int _ID;
 
+    string _bitset;
+
     bool _enable;
 };
 
@@ -175,22 +178,20 @@ ostream &operator<<(ostream &out, const Component &right){
     return out;
 }
 
-static Component bit1(Component::TYPE::BIT, 1, 1, 1, nullptr, nullptr);
-static Component bit0(Component::TYPE::BIT, 0, 0, 0, nullptr, nullptr);
-
 static unordered_map<int, Component*> wireList;
-
 static unordered_map<int, Component*> inList;
+static unordered_map<string, Component*> bitsetList;
+
 static map<int, Component*> outList;
 
 void assign(Component *assigned, string leftItem, string rightItem = ""){
     string &item = leftItem;
 
     if(item == "1'b1" || item == "~1'b0"){
-        assigned->_left = &bit1;
+        assigned->_left = bitsetList["1"];
     }
     else if(item == "1'b0" || item == "~1'b1"){
-        assigned->_left = &bit0;
+        assigned->_left = bitsetList["0"];
     }
     else if(item.find("origtmp") == 0){
         assigned->_left = wireList[stoi(item.substr(7))];
@@ -217,10 +218,10 @@ void assign(Component *assigned, string leftItem, string rightItem = ""){
     item = rightItem;
     if(item != ""){
         if(item == "1'b1" || item == "~1'b0"){
-            assigned->_right = &bit1;
+            assigned->_right = bitsetList["1"];
         }
         else if(item == "1'b0" || item == "~1'b1"){
-            assigned->_right = &bit0;
+            assigned->_right = bitsetList["0"];
         }
         else if(item.find("origtmp") == 0){
             assigned->_right = wireList[stoi(item.substr(7))];
@@ -246,6 +247,8 @@ void assign(Component *assigned, string leftItem, string rightItem = ""){
     }
 }
 
+//TODO A and ~A -> bit0
+//TODO A and wire; wire = ~A 
 void post_order_reduction(Component *cur){
     if(cur->_type == Component::TYPE::BIT || cur->_type == Component::TYPE::IN)
         return;
@@ -302,57 +305,57 @@ void post_order_reduction(Component *cur){
     }
     else if(cur->_type == Component::TYPE::NOT){
         if(cur->_left->_type == Component::TYPE::BIT){
-            if(*cur->_left == bit0){
-                cur->_parent->_left = &bit1;
+            if(cur->_left == bitsetList["0"]){
+                cur->_parent->_left = bitsetList["1"];
             }
-            else if(*cur->_left == bit1){
-                cur->_parent->_left = &bit0;
+            else if(cur->_left == bitsetList["1"]){
+                cur->_parent->_left = bitsetList["0"];
             }
         }
     }
     else if(cur->_type == Component::TYPE::OR){
-        if(*cur->_left == bit1 || *cur->_right == bit1){
-            cur->_parent->_left = &bit1;
+        if(cur->_left == bitsetList["1"] || cur->_right == bitsetList["1"]){
+            cur->_parent->_left = bitsetList["1"];
         }
-        else if(*cur->_left == bit0){
+        else if(cur->_left == bitsetList["0"]){
             cur->_parent->_left = cur->_right;
         }
-        else if(*cur->_right == bit0){
+        else if(cur->_right == bitsetList["0"]){
             cur->_parent->_left = cur->_left;
         }
         else if(
-            *cur->_left == bit0 && *cur->_right == bit1 ||
-            *cur->_left == bit1 && *cur->_right == bit0 ||
-            *cur->_left == bit1 && *cur->_right == bit1
+            cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
+            cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"] ||
+            cur->_left == bitsetList["1"] && cur->_right == bitsetList["1"]
             ){
-                cur->_parent->_left = &bit1;
+                cur->_parent->_left = bitsetList["1"];
         }
-        else if(*cur->_left == bit0 && *cur->_right == bit0){
-            cur->_parent->_left = &bit0;
+        else if(cur->_left == bitsetList["0"] && cur->_right == bitsetList["0"]){
+            cur->_parent->_left = bitsetList["0"];
         }
         else if(*cur->_left == *cur->_right){
             cur->_parent->_left = cur->_left;
         }
     }
     else if(cur->_type == Component::TYPE::AND){
-        if(*cur->_left == bit0 || *cur->_right == bit0){
-            cur->_parent->_left = &bit0;
+        if(cur->_left == bitsetList["0"] || cur->_right == bitsetList["0"]){
+            cur->_parent->_left = bitsetList["0"];
         }
-        else if(*cur->_left == bit1){
+        else if(cur->_left == bitsetList["1"]){
             cur->_parent->_left = cur->_right;
         }
-        else if(*cur->_right == bit1){
+        else if(cur->_right == bitsetList["1"]){
             cur->_parent->_left = cur->_left;
         }
         else if(
-            *cur->_left == bit0 && *cur->_right == bit0 ||
-            *cur->_left == bit0 && *cur->_right == bit1 ||
-            *cur->_left == bit1 && *cur->_right == bit0
+            cur->_left == bitsetList["0"] && cur->_right == bitsetList["0"] ||
+            cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
+            cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"]
             ){
-                cur->_parent->_left = &bit0;
+                cur->_parent->_left = bitsetList["0"];
         }
-        else if(*cur->_left == bit1 && *cur->_right == bit1){
-            cur->_parent->_left = &bit1;
+        else if(cur->_left == bitsetList["1"] && cur->_right == bitsetList["1"]){
+            cur->_parent->_left = bitsetList["1"];
         }
         else if(*cur->_left == *cur->_right){
             cur->_parent->_left = cur->_left;
@@ -360,25 +363,101 @@ void post_order_reduction(Component *cur){
     }
     else if(cur->_type == Component::TYPE::XOR){
         if(
-            *cur->_left == bit0 && *cur->_right == bit1 ||
-            *cur->_left == bit1 && *cur->_right == bit0
+            cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
+            cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"]
             ){
-                cur->_parent->_left = &bit1;
+                cur->_parent->_left = bitsetList["1"];
         }
-        else if(*cur->_left == bit0){
+        else if(cur->_left == bitsetList["0"]){
             cur->_parent->_left = cur->_right;
         }
-        else if(*cur->_right == bit0){
+        else if(cur->_right == bitsetList["0"]){
             cur->_parent->_left = cur->_left;
         }
-        else if(*cur->_left == *cur->_right){
-            cur->_parent->_left = &bit0;
+        else if(cur->_left == cur->_right){
+            cur->_parent->_left = bitsetList["0"];
         }
     }
 }
 
-void expression_combination(){
-    
+// string make_post_order_expression(const Component *head){
+
+//     return "";
+// }
+
+//* pre-oder traversal
+bool check_combinable(Component *left, Component *right){
+    if(left == right){
+        return true;
+    }
+    else if(left == nullptr || right == nullptr){
+        return false;
+    }
+
+    if(left->_type != right->_type){
+        return false;
+    }
+
+    if(left->_type == Component::TYPE::BIT && right->_type == Component::TYPE::BIT){
+        return true;
+    }
+
+    // clog << "left->_LSB: " << left->_LSB << "\n";
+    // clog << "right->_LSB: " << right->_MSB << "\n";
+    if(left->_type == Component::TYPE::OUT || left->_type == Component::TYPE::IN){
+        if(right->_LSB - left->_MSB != 1){
+            return false;
+        }
+    }
+
+    return check_combinable(left->_left, right->_left) && check_combinable(left->_right, right->_right);
+}
+
+void pre_order_combination(Component *left, Component *right, Component *parent = nullptr){
+    if(left == nullptr){
+        return;
+    }
+    else if(left->_type == Component::TYPE::OUT || left->_type == Component::TYPE::IN){
+        left->_MSB = right->_MSB;
+    }
+    else if(left->_type == Component::TYPE::BIT){
+        string combine = right->_bitset + left->_bitset;
+        if(!bitsetList.count(combine)){
+            bitsetList[combine] = new Component(
+                    Component::TYPE::BIT,
+                    bitsetList.size(),
+                    combine.length()-1,
+                    0,
+                    nullptr,
+                    nullptr,
+                    nullptr,
+                    combine
+                );
+        }
+
+        parent->_left = bitsetList[combine];
+    }
+    else{
+        clog << "<?>\n"; 
+    }
+
+    pre_order_combination(left->_left, right->_left, left);
+    pre_order_combination(left->_right, right->_right, left);
+}
+
+bool expression_combination(Component *left, Component *right){
+    if(check_combinable(left, right)){
+        clog << "yes: " << left->_ID << " " << right->_ID << "\n";
+
+        pre_order_combination(left, right);
+        outList.erase(right->_ID);
+        return true;
+    }
+    else{
+        clog << "no: " << left->_ID << " " << right->_ID << "\n";
+    }
+        
+    return false;
 }
 
 void parser(ifstream &in, ofstream &out){
@@ -402,7 +481,7 @@ void parser(ifstream &in, ofstream &out){
             split >> lsb;
 
             for(int i = lsb; i <= msb; ++i){
-                outList.insert(make_pair( i, new Component(Component::TYPE::OUT, i, 0, 0, nullptr, nullptr) ));
+                outList.insert(make_pair( i, new Component(Component::TYPE::OUT, i, i, i, nullptr, nullptr) ));
             }
 
             out << line << "\n";
@@ -418,7 +497,7 @@ void parser(ifstream &in, ofstream &out){
             split >> lsb;
 
             for(int i = lsb; i <= msb; ++i){
-                inList.insert(make_pair( i, new Component(Component::TYPE::IN, i, 0, 0, nullptr, nullptr) ));
+                inList.insert(make_pair( i, new Component(Component::TYPE::IN, i, i, i, nullptr, nullptr) ));
             }
 
             out << line << "\n";
@@ -486,10 +565,10 @@ void parser(ifstream &in, ofstream &out){
         }
         else if(kw == "endmodule" && !opt){
             #ifdef DEBUG
-            clog << "<Debug> Before" << endl;
-            for(auto &it: outList){
-                clog << *it.second << "\n";
-            }
+            // clog << "<Debug> Before" << endl;
+            // for(auto &it: outList){
+            //     clog << *it.second << "\n";
+            // }
             #endif
             
             opt = true;
@@ -500,10 +579,22 @@ void parser(ifstream &in, ofstream &out){
                 post_order_reduction(it.second);
             }
 
+            //* expression combination
+            for(map<int, Component*>::iterator it = outList.begin(); it != prev(outList.end(), 1);){
+                map<int, Component*>::iterator left = it;
+                map<int, Component*>::iterator right = next(it, 1);
+                
+                if(!expression_combination(left->second, right->second)){
+                    ++it;
+                }
+            }
+
             //* output result
+            #ifdef DEBUG
             for(auto &it: outList){
                 out << it.second->post_order_make_inst();
             }
+            #endif
 
             // for(auto &it: wireList){
             //     out << it.second->make_wire_inst();
@@ -516,10 +607,10 @@ void parser(ifstream &in, ofstream &out){
             // }
 
             #ifdef DEBUG
-            clog << "<Debug> After" << endl;
-            for(auto &it: outList){
-                clog << *it.second << "\n";
-            }
+            // clog << "<Debug> After" << endl;
+            // for(auto &it: outList){
+            //     clog << *it.second << "\n";
+            // }
             #endif
 
             out << line << "\n";
@@ -532,15 +623,18 @@ void parser(ifstream &in, ofstream &out){
 
 int main(int argc, char **argv){
     #ifdef RELEASE
-    #elif DEBUG
+    #elif defined DEBUG
     #else
-        return EXIT_FAILURE
+        return EXIT_FAILURE;
     #endif
 
     //* input original file
     ifstream fori(argv[1]);
     //* output optimized file
     ofstream fopt(argv[2]);
+
+    bitsetList["0"] = new Component(Component::TYPE::BIT, 0, 0, 0, nullptr, nullptr, nullptr, "0");
+    bitsetList["1"] = new Component(Component::TYPE::BIT, 1, 0, 0, nullptr, nullptr, nullptr, "1");
 
     parser(fori, fopt);
 

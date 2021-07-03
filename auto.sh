@@ -1,22 +1,32 @@
 #!/bin/bash
 
-make
-
-if [ "$1" != "" ] 
+if [ "$1" == "" ] 
 then
 
-./verilogopt test/$1/original.v test/$1/optimized.v
-./eval test/$1/original.v test/$1/optimized.v
-echo finish $1
+make
+for n in {1..3};
+do
+    ./verilogopt test/testcase$n/original.v test/testcase$n/optimized.v
+    ./eval test/testcase$n/original.v test/testcase$n/optimized.v
+    echo finish testcase$n
+    echo
+done
 
-else
+elif [ "$1" == "eval" ] 
+then
 
 for n in {1..3};
 do
-./verilogopt test/testcase$n/original.v test/testcase$n/optimized.v
-./eval test/testcase$n/original.v test/testcase$n/optimized.v
-echo finish testcase$n
-echo
+    ./eval test/testcase$n/original.v test/testcase$n/optimized.v
+    echo finish testcase$n
+    echo
 done
+
+else
+
+make
+./verilogopt test/$1/original.v test/$1/optimized.v
+./eval test/$1/original.v test/$1/optimized.v
+echo finish $1
 
 fi

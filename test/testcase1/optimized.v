@@ -51,12 +51,7 @@ module dut (out, in);
 	assign out[1] = xformtmp25 ^ in[1];
 	assign out[2] = in[5];
 	assign out[3] = in[19];
-	assign out[4] = 1'b1;
-	assign out[5] = 1'b0;
-	assign out[6] = 1'b0;
-	assign out[7] = 1'b0;
-	assign out[8] = 1'b0;
-	assign out[9] = 1'b1;
+	assign out[9:4] = 6'b100001;
 endmodule
 
 module tb();
