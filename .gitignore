@@ -33,3 +33,7 @@
 verilogopt
 *.log
 eval
+test/testcase6/simorig.txt
+test/testcase6/original.v
+test/testcase6/optimized.v
+test/testcase6/data.txt
