@@ -1,8 +1,8 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-// #define RELEASE
-#define DEBUG
+#define RELEASE
+// #define DEBUG
 
 static unordered_set<int> wireOutList;
 
@@ -15,7 +15,8 @@ struct Component{
         Component *left = nullptr,
         Component *right = nullptr,
         Component *parent = nullptr,
-        string bitset = ""
+        string bitset = "",
+        bool sharing = false
     ) : 
         _type(type),
         _ID(ID),
@@ -25,7 +26,7 @@ struct Component{
         _right(right),
         _parent(parent),
         _bitset(bitset),
-        _enable(true)
+        _sharing(sharing)
     {
     }
 
@@ -99,10 +100,10 @@ struct Component{
     string post_order_make_inst(){
         string inst;
 
-        if(_left != nullptr){
+        if(_left != nullptr && _left->_type != TYPE::OUT && !_sharing){
             inst += _left->post_order_make_inst();
         }
-        if(_right != nullptr){
+        if(_right != nullptr && _right->_type != TYPE::OUT && !_sharing){
             inst += _right->post_order_make_inst();
         }
 
@@ -141,7 +142,7 @@ struct Component{
 
     string _bitset;
 
-    bool _enable;
+    bool _sharing;
 };
 
 unordered_map<int, const char*> TypeToString = {
@@ -247,8 +248,56 @@ void assign(Component *assigned, string leftItem, string rightItem = ""){
     }
 }
 
-//TODO A and ~A -> bit0
-//TODO A and wire; wire = ~A 
+
+bool search_term(Component *head, Component *term, Component::TYPE parent_type, Component *&term_position){
+    if(head == nullptr)
+        return false;
+
+    if(head->_type == parent_type){
+        if(head->_left == term || head->_right == term){
+            term_position = head;
+            return true;
+        }
+        return false;
+    }
+    else if(head->_type == Component::BIT){
+        return false;
+    }
+    return search_term(head->_left, term, parent_type, term_position) || search_term(head->_right, term, parent_type, term_position);
+}
+
+bool check_same_op(Component *head, Component::TYPE parent_type){
+    if(head == nullptr)
+        return true;
+
+    if(
+        head->_type == Component::AND ||
+        head->_type == Component::OR ||
+        head->_type == Component::XOR ||
+        head->_type == Component::NOT
+    ){
+        if(head->_type == parent_type){
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
+
+    return check_same_op(head->_left, parent_type) && check_same_op(head->_right, parent_type);
+}
+
+void assign_parent(Component *assigned, Component *parent){
+    if(
+        assigned->_type != Component::BIT &&
+        assigned->_type != Component::IN
+    ){
+        assigned->_parent = parent;
+    }
+}
+
+// TODO A and ~A -> bit0
+// TODO A and wire; wire = ~A 
 void post_order_reduction(Component *cur){
     if(cur->_type == Component::TYPE::BIT || cur->_type == Component::TYPE::IN)
         return;
@@ -265,6 +314,7 @@ void post_order_reduction(Component *cur){
     }
     else if(cur->_type == Component::TYPE::WIRE){
         if(cur->_parent != nullptr){
+            
             if(cur->_left->_type == Component::TYPE::BIT){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
@@ -284,98 +334,257 @@ void post_order_reduction(Component *cur){
             else if(cur->_left->_type == Component::TYPE::WIRE){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
+                    assign_parent(cur->_parent->_left, cur->_parent);
                 }
                 else if(cur->_parent->_right == cur){
                     cur->_parent->_right = cur->_left;
+                    assign_parent(cur->_parent->_right, cur->_parent);
                 }
             }
             // ! do not mix unary and binary
-            // else if(cur->_left->_type == Component::TYPE::NOT){
-            //     if(cur->_parent->_left == cur){
-            //         cur->_parent->_left = cur->_left;
-            //         cur->_left = cur;
-            //     }
-            //     else if(cur->_parent->_right == cur){
-            //         cur->_parent->_right = cur->_left;
-            //         cur->_left = cur;
-            //     }
-            // }
+            else if(
+                cur->_left->_type == Component::TYPE::NOT &&
+                cur->_parent->_type != Component::AND &&
+                cur->_parent->_type != Component::OR &&
+                cur->_parent->_type != Component::XOR
+            ){
+                if(cur->_parent->_left == cur){
+                    cur->_parent->_left = cur->_left;
+                    // assign_parent(cur->_parent->_left, cur->_parent);
+                    // cur->_left = cur;
+                }
+                else if(cur->_parent->_right == cur){
+                    cur->_parent->_right = cur->_left;
+                    // assign_parent(cur->_parent->_right, cur->_parent);
+                    // cur->_left = cur;
+                }
+            }
         }
-        
     }
     else if(cur->_type == Component::TYPE::NOT){
         if(cur->_left->_type == Component::TYPE::BIT){
+            // * not 0 = 1
             if(cur->_left == bitsetList["0"]){
                 cur->_parent->_left = bitsetList["1"];
             }
+            // * not 1 = 0
             else if(cur->_left == bitsetList["1"]){
                 cur->_parent->_left = bitsetList["0"];
             }
         }
+        else if(cur->_left->_type == Component::TYPE::WIRE){
+            // * not (not A) = A
+            if(cur->_left->_left->_type == Component::TYPE::NOT){
+                cur->_parent->_left = cur->_left->_left->_left;
+                assign_parent(cur->_parent->_left, cur->_parent);
+                // if(cur->_left->_left->_left->_type != Component::BIT) cur->_left->_left->_left->_parent = cur->_parent;
+            }
+        }
+        else if(cur->_left->_type == Component::TYPE::NOT){
+            cur->_parent->_left = cur->_left->_left;
+            assign_parent(cur->_parent->_left, cur->_parent);
+        }
     }
     else if(cur->_type == Component::TYPE::OR){
+        Component *term_position = nullptr;
+
+        // * 1 or A = 1
+        // * A or 1 = 1
         if(cur->_left == bitsetList["1"] || cur->_right == bitsetList["1"]){
             cur->_parent->_left = bitsetList["1"];
         }
-        else if(cur->_left == bitsetList["0"]){
+        // * 0 or A = A
+        if(cur->_left == bitsetList["0"]){
             cur->_parent->_left = cur->_right;
         }
+        // * A or 0 = A
         else if(cur->_right == bitsetList["0"]){
             cur->_parent->_left = cur->_left;
         }
-        else if(
-            cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
-            cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"] ||
-            cur->_left == bitsetList["1"] && cur->_right == bitsetList["1"]
-            ){
-                cur->_parent->_left = bitsetList["1"];
-        }
-        else if(cur->_left == bitsetList["0"] && cur->_right == bitsetList["0"]){
-            cur->_parent->_left = bitsetList["0"];
-        }
+        // * 0 or 1 = 1
+        // * 1 or 0 = 1
+        // * 1 or 1 = 1
+        // else if(
+        //     cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
+        //     cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"] ||
+        //     cur->_left == bitsetList["1"] && cur->_right == bitsetList["1"]
+        //     ){
+        //         cur->_parent->_left = bitsetList["1"];
+        // }
+        // * 0 or 0 = 0
+        // else if(cur->_left == bitsetList["0"] && cur->_right == bitsetList["0"]){
+        //     cur->_parent->_left = bitsetList["0"];
+        // }
+        // * A or A = A
         else if(*cur->_left == *cur->_right){
+            cur->_parent->_left = cur->_left;
+        }
+
+        // * A or (A and B) = A
+        else if(
+            cur->_right->_type == Component::WIRE &&
+            cur->_right->_left->_type == Component::AND && (
+                cur->_left == cur->_right->_left->_left ||
+                cur->_left == cur->_right->_left->_right
+            )
+            ){
             cur->_parent->_left = cur->_left;
         }
     }
     else if(cur->_type == Component::TYPE::AND){
+        Component *term_position = nullptr;
+
+        // * 0 and A = 0
+        // * A and 0 = 0
         if(cur->_left == bitsetList["0"] || cur->_right == bitsetList["0"]){
             cur->_parent->_left = bitsetList["0"];
         }
+        // * 1 and A = A
         else if(cur->_left == bitsetList["1"]){
             cur->_parent->_left = cur->_right;
         }
+        // * A and 1 = A
         else if(cur->_right == bitsetList["1"]){
             cur->_parent->_left = cur->_left;
         }
-        else if(
-            cur->_left == bitsetList["0"] && cur->_right == bitsetList["0"] ||
-            cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
-            cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"]
-            ){
-                cur->_parent->_left = bitsetList["0"];
-        }
-        else if(cur->_left == bitsetList["1"] && cur->_right == bitsetList["1"]){
-            cur->_parent->_left = bitsetList["1"];
-        }
+        // * 0 and 0 = 0
+        // * 0 and 1 = 0
+        // * 1 and 0 = 0
+        // else if(
+        //     cur->_left == bitsetList["0"] && cur->_right == bitsetList["0"] ||
+        //     cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
+        //     cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"]
+        //     ){
+        //         cur->_parent->_left = bitsetList["0"];
+        // }
+        // * 1 and 1 = 1
+        // else if(cur->_left == bitsetList["1"] && cur->_right == bitsetList["1"]){
+        //     cur->_parent->_left = bitsetList["1"];
+        // }
+        // * A and A = A
         else if(*cur->_left == *cur->_right){
             cur->_parent->_left = cur->_left;
         }
-    }
-    else if(cur->_type == Component::TYPE::XOR){
-        if(
-            cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
-            cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"]
-            ){
-                cur->_parent->_left = bitsetList["1"];
-        }
-        else if(cur->_left == bitsetList["0"]){
-            cur->_parent->_left = cur->_right;
-        }
-        else if(cur->_right == bitsetList["0"]){
+
+        // * (A and B) and A = A and B
+        // * (A and B) and B = A and B
+
+        // * (A and B) and (A or *) = A and B
+        // * (A and B) and (B or *) = A and B
+        else if(
+            cur->_left->_type == Component::WIRE &&
+            cur->_right->_type == Component::WIRE &&
+            cur->_left->_left->_type == Component::AND && (
+                search_term(cur->_right, cur->_left->_left->_left, Component::OR, term_position) ||
+                search_term(cur->_right, cur->_left->_left->_right, Component::OR, term_position)
+            )
+        ){
             cur->_parent->_left = cur->_left;
         }
-        else if(cur->_left == cur->_right){
+        // * (A or *) and (A and B) = A and B
+        // * (B or *) and (A and B) = A and B
+        else if(
+            cur->_left->_type == Component::WIRE &&
+            cur->_right->_type == Component::WIRE &&
+            cur->_right->_left->_type == Component::AND && (
+                search_term(cur->_left, cur->_right->_left->_left, Component::OR, term_position) ||
+                search_term(cur->_left, cur->_right->_left->_right, Component::OR, term_position)
+            )
+        ){
+            cur->_parent->_left = cur->_right;
+        }
+    }
+    else if(cur->_type == Component::TYPE::XOR){
+        Component *term_position = nullptr;
+        // * 0 xor 1 = 1
+        // * 1 xor 0 = 1 
+        // if(
+        //     cur->_left == bitsetList["0"] && cur->_right == bitsetList["1"] ||
+        //     cur->_left == bitsetList["1"] && cur->_right == bitsetList["0"]
+        //     ){
+        //         cur->_parent->_left = bitsetList["1"];
+        // }
+        // * A xor A = 0
+        if(cur->_left == cur->_right){
             cur->_parent->_left = bitsetList["0"];
+        }
+        // * 0 xor A = A
+        else if(cur->_left == bitsetList["0"]){
+            cur->_parent->_left = cur->_right;
+            if(cur->_right->_type != Component::BIT) cur->_right->_parent = cur->_parent;
+        }
+        // * A xor 0 = A
+        else if(cur->_right == bitsetList["0"]){
+            cur->_parent->_left = cur->_left;
+            if(cur->_left->_type != Component::BIT) cur->_left->_parent = cur->_parent;
+        }
+        // * A xor 1 = ~A
+        else if(cur->_right == bitsetList["1"]){
+            cur->_parent->_left->_type = Component::NOT;
+            cur->_parent->_left->_left = cur->_left;
+            cur->_parent->_left->_right = nullptr;
+            
+            // if(cur->_left->_type != Component::BIT) cur->_left->_parent = cur->_parent;
+        }
+        // * 1 xor A = ~A
+        else if(cur->_left == bitsetList["1"]){
+            cur->_parent->_left->_type = Component::NOT;
+            cur->_parent->_left->_left = cur->_right;
+            cur->_parent->_left->_right = nullptr;
+
+            // if(cur->_right->_type != Component::BIT) cur->_right->_parent = cur->_parent;
+        }
+        
+        // * A xor (A + B) = not A and B
+        else if(
+            cur->_right->_type == Component::WIRE &&
+            cur->_right->_left->_type == Component::OR &&
+            cur->_left == cur->_right->_left->_left
+        ){
+            cur->_parent->_left->_type = Component::AND;
+            Component *A = cur->_left;
+            Component *B = cur->_right->_left->_right;
+
+            cur->_left = B;
+            cur->_right->_left->_type = Component::NOT;
+            cur->_right->_left->_right = nullptr;
+        }
+
+        // * (A xor B) xor (A xor ... xor *) = B xor ... xor *
+        else if(
+            cur->_left->_type == Component::WIRE &&
+            cur->_left->_left->_type == Component::XOR &&
+            cur->_right->_type == Component::WIRE &&
+            cur->_right->_left->_type == Component::XOR && (
+                check_same_op(cur->_right, Component::XOR) &&
+                search_term(cur->_right, cur->_left->_left->_left, Component::XOR, term_position)
+            )
+        ){
+            Component *A = cur->_left->_left->_left;
+            Component *B = cur->_left->_left->_right;
+            cur->_left = B;
+
+            // clog << term_position << endl;
+            term_position->_parent->_left = A == term_position->_right ? term_position->_left : term_position->_right;
+            assign_parent(term_position->_parent->_left, term_position->_parent);
+        }
+        // * (A xor B) xor (B xor ... xor *) = A xor ... xor *
+        else if(
+            cur->_left->_type == Component::WIRE &&
+            cur->_left->_left->_type == Component::XOR &&
+            cur->_right->_type == Component::WIRE &&
+            cur->_right->_left->_type == Component::XOR && (
+                check_same_op(cur->_right, Component::XOR) &&
+                search_term(cur->_right, cur->_left->_left->_right, Component::XOR, term_position)
+            )
+        ){
+            Component *A = cur->_left->_left->_left;
+            Component *B = cur->_left->_left->_right;
+            cur->_left = A;
+
+            // clog << term_position << endl;
+            term_position->_parent->_left = B == term_position->_right ? term_position->_left : term_position->_right;
+            assign_parent(term_position->_parent->_left, term_position->_parent);
         }
     }
 }
@@ -385,9 +594,14 @@ void post_order_reduction(Component *cur){
 //     return "";
 // }
 
-//* pre-oder traversal
-bool check_combinable(Component *left, Component *right){
-    if(left == right){
+unsigned xor_op = 0;
+unsigned and_op = 0;
+unsigned or_op = 0;
+set<Component*> term_set_left;
+set<Component*> term_set_right;
+
+bool check_equal(Component *left, Component *right){
+    if(left == nullptr && right == nullptr){
         return true;
     }
     else if(left == nullptr || right == nullptr){
@@ -398,7 +612,102 @@ bool check_combinable(Component *left, Component *right){
         return false;
     }
 
-    if(left->_type == Component::TYPE::BIT && right->_type == Component::TYPE::BIT){
+    if(
+        left->_type == Component::BIT || 
+        left->_type == Component::IN ||
+        left->_type == Component::OUT
+    ){
+        if(left != right){
+            return false;
+        }
+    }
+
+    return check_equal(left->_left, right->_left) && check_equal(left->_right, right->_right);
+}
+
+bool check_equal_alternative(Component *left, Component *right){
+    if(left == nullptr && right == nullptr){
+        return true;
+    }
+    else if(left == nullptr || right == nullptr){
+        return false;
+    }
+
+    if(left->_type != right->_type){
+        return false;
+    }
+
+    if(left->_type == Component::BIT){
+        if(left != right){
+            return false;
+        }
+    }
+    else if(left->_type == Component::IN){
+        term_set_left.insert(left);
+        term_set_right.insert(right);
+    }
+    else if(left->_type == Component::XOR){
+        ++xor_op;
+    }
+    else if(left->_type == Component::AND){
+        ++and_op;
+    }
+    else if(left->_type == Component::OR){
+        ++or_op;
+    }
+
+    return check_equal_alternative(left->_left, right->_left) && check_equal_alternative(left->_right, right->_right);
+}
+
+bool combine_equal(Component *left, Component *right){
+    if(left == nullptr || right == nullptr){
+        return false;
+    }
+    if(left->_left->_type == Component::BIT && right->_left->_type == Component::BIT){
+        return false;
+    }
+
+    xor_op = 0;
+    and_op = 0;
+    or_op = 0;
+    term_set_left.clear();
+    term_set_right.clear();
+
+    // if(check_equal_alternative(left, right)){
+    //     if(xor_op == xor_op + and_op + or_op && term_set_left == term_set_right){
+    //         left->_left = right;
+    //         left->_sharing = true;
+    //     }
+    //     else{
+    //         // clog << (xor_op == xor_op + and_op + or_op) << endl;
+    //         // clog << (term_set_left == term_set_right) << endl;
+    //     }
+
+    //     return true;
+    // }
+    // else 
+    if(check_equal(left, right)){
+        left->_left = right;
+        left->_sharing = true;
+    }
+
+    return false;
+}
+
+//* pre-oder traversal
+bool check_combinable(Component *left, Component *right){
+    if(left == nullptr && right == nullptr){
+        return true;
+    }
+    else if(left == nullptr || right == nullptr){
+        return false;
+    }
+
+    if(left->_type != right->_type){
+        return false;
+    }
+
+    if(left->_type == Component::TYPE::BIT){
         return true;
     }
 
@@ -408,6 +717,7 @@ bool check_combinable(Component *left, Component *right){
         if(right->_LSB - left->_MSB != 1){
             return false;
         }
+        // return true;
     }
 
     return check_combinable(left->_left, right->_left) && check_combinable(left->_right, right->_right);
@@ -447,20 +757,25 @@ void pre_order_combination(Component *left, Component *right, Component *parent 
 
 bool expression_combination(Component *left, Component *right){
     if(check_combinable(left, right)){
+        #ifdef DEBUG
         clog << "yes: " << left->_ID << " " << right->_ID << "\n";
+        #endif
 
         pre_order_combination(left, right);
         outList.erase(right->_ID);
         return true;
     }
     else{
+        #ifdef DEBUG
         clog << "no: " << left->_ID << " " << right->_ID << "\n";
+        #endif
     }
         
     return false;
 }
 
 void parser(ifstream &in, ofstream &out){
+    out << fixed;
     string line;
     bool opt = false;
     while(getline(in, line)){
@@ -557,6 +872,19 @@ void parser(ifstream &in, ofstream &out){
                     opr = new Component(Component::TYPE::XOR, 0, 0, 0, nullptr, nullptr, L);
                 }
 
+                if(item2.find("in") == 0 || item2.find("~in") == 0){
+                    if(item1.find("in") == 0 || item1.find("~in") == 0){
+                        int idx1 = stoi(item1.substr(item1.find('[') + 1, item1.find(']') - item1.find('[') - 1));
+                        int idx2 = stoi(item2.substr(item2.find('[') + 1, item2.find(']') - item2.find('[') - 1));
+                        if(idx2 < idx1){
+                            swap(item1, item2);
+                        }
+                    }
+                    else{
+                        swap(item1, item2);
+                    }
+                    
+                }
                 assign(opr, item1, item2);
 
                 L->_left = opr;
@@ -577,9 +905,24 @@ void parser(ifstream &in, ofstream &out){
             //* Post-order Reduction
             for(auto &it: outList){
                 post_order_reduction(it.second);
+                post_order_reduction(it.second);
+                // post_order_reduction(it.second);
             }
 
-            //* expression combination
+            //* equal expression combination
+            // for(map<int, Component*>::iterator it = outList.begin(); it != prev(outList.end(), 1);){
+            //     map<int, Component*>::iterator left = it;
+            //     map<int, Component*>::iterator right = next(it, 1);
+                
+            //     combine_equal(left->second, right->second);
+            //     for(auto &jt: wireList){
+            //         combine_equal(jt.second, left->second);
+            //         combine_equal(jt.second, right->second);
+            //     }
+            //     ++it;
+            // }
+
+            //* continuous expression combination
             for(map<int, Component*>::iterator it = outList.begin(); it != prev(outList.end(), 1);){
                 map<int, Component*>::iterator left = it;
                 map<int, Component*>::iterator right = next(it, 1);
@@ -590,11 +933,11 @@ void parser(ifstream &in, ofstream &out){
             }
 
             //* output result
-            #ifdef DEBUG
+            // #ifdef DEBUG
             for(auto &it: outList){
                 out << it.second->post_order_make_inst();
             }
-            #endif
+            // #endif
 
             // for(auto &it: wireList){
             //     out << it.second->make_wire_inst();

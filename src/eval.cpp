@@ -2,8 +2,8 @@
 using namespace std;
 
 void eval_parser(ifstream &in){
-    double port = 0.0;
-    double assign_select = 0.0;
+    unsigned port = 0;
+    unsigned assign_select = 0;
 
     string line;
     bool opt = false;
@@ -46,7 +46,7 @@ void eval_parser(ifstream &in){
             if(lhs.substr(0, 3) == "out"){
                 // out[#]
                 int idx = stoi(lhs.substr(lhs.find('[') + 1, lhs.find(']') - lhs.find('[') - 1));
-                assign_select += 1.0;
+                assign_select += 1;
                 // cout << lhs << endl;
             }
             
@@ -63,13 +63,13 @@ void eval_parser(ifstream &in){
             split >> op;
             split >> item2;
 
-            if(item1.find("out") == 0 || item1.find("in") == 0){
-                assign_select += 1.0;
+            if(item1.find("out") == 0 || item1.find("in") == 0 || item1.find("~in") == 0){
+                assign_select += 1;
                 // cout << item1 << endl;
             }
 
-            if(item2.find("out") == 0 || item2.find("in") == 0){
-                assign_select += 1.0;
+            if(item2.find("out") == 0 || item2.find("in") == 0 || item2.find("~in") == 0){
+                assign_select += 1;
                 // cout << item2 << endl;
             }
 
@@ -78,7 +78,7 @@ void eval_parser(ifstream &in){
 
     cout << "port: " << port << endl;
     cout << "assign_select: " << assign_select << endl;
-    cout << "evaluation: " << port / assign_select << endl;
+    cout << "evaluation: " << (double)port / (double)assign_select << endl;
 }
 
 int main(int argc, char **argv){
@@ -86,6 +86,8 @@ int main(int argc, char **argv){
     ifstream fori(argv[1]);
     //* output optimized file
     ifstream fopt(argv[2]);
+
+    cout << fixed << setprecision(10);
 
     cout << "<original>" << endl;
     eval_parser(fori);
