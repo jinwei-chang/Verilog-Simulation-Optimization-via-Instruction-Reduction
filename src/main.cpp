@@ -296,8 +296,6 @@ void assign_parent(Component *assigned, Component *parent){
     }
 }
 
-// TODO A and ~A -> bit0
-// TODO A and wire; wire = ~A 
 void post_order_reduction(Component *cur){
     if(cur->_type == Component::TYPE::BIT || cur->_type == Component::TYPE::IN)
         return;
