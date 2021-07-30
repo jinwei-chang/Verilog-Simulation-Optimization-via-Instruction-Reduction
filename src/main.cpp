@@ -227,68 +227,7 @@ static unordered_map<string, Component*> bitsetList;
 
 static map<int, Component*> outList;
 
-void assign(Component *assigned, string leftItem, string rightItem = ""){
-    string &item = leftItem;
 
-    if(item == "1'b1" || item == "~1'b0"){
-        assigned->_left = bitsetList["1"];
-    }
-    else if(item == "1'b0" || item == "~1'b1"){
-        assigned->_left = bitsetList["0"];
-    }
-    else if(item.find("origtmp") == 0){
-        assigned->_left = wireList[stoi(item.substr(7))];
-        assigned->_left->_parent = assigned;
-    }
-    else if(item.find("~origtmp") == 0){
-        assigned = assigned->_left = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
-        assigned->_left = wireList[stoi(item.substr(8))];
-        assigned->_left->_parent = assigned;
-    }
-    else if(item.find("in") == 0){
-        int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
-        assigned->_left = inList[idx];
-    }
-    else if(item.find("~in") == 0){
-        assigned = assigned->_left = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
-        int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
-        assigned->_left = inList[idx];
-    }
-    else{
-        clog << "<?> " << item << "\n";
-    }
-
-    item = rightItem;
-    if(item != ""){
-        if(item == "1'b1" || item == "~1'b0"){
-            assigned->_right = bitsetList["1"];
-        }
-        else if(item == "1'b0" || item == "~1'b1"){
-            assigned->_right = bitsetList["0"];
-        }
-        else if(item.find("origtmp") == 0){
-            assigned->_right = wireList[stoi(item.substr(7))];
-            assigned->_right->_parent = assigned;
-        }
-        else if(item.find("~origtmp") == 0){
-            assigned = assigned->_right = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
-            assigned->_right = wireList[stoi(item.substr(8))];
-            assigned->_right->_parent = assigned;
-        }
-        else if(item.find("in") == 0){
-            int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
-            assigned->_right = inList[idx];
-        }
-        else if(item.find("~in") == 0){
-            assigned = assigned->_right = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
-            int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
-            assigned->_right = inList[idx];
-        }
-        else{
-            clog << "<?> " << item << "\n";
-        }
-    }
-}
 
 
 bool search_term(Component *head, Component *term, Component::TYPE parent_type, Component *&term_position){
@@ -933,6 +872,69 @@ bool expression_combination(Component *left, Component *right){
     return false;
 }
 
+void assign(Component *assigned, string leftItem, string rightItem = ""){
+    string &item = leftItem;
+
+    if(item == "1'b1" || item == "~1'b0"){
+        assigned->_left = bitsetList["1"];
+    }
+    else if(item == "1'b0" || item == "~1'b1"){
+        assigned->_left = bitsetList["0"];
+    }
+    else if(item.find("origtmp") == 0){
+        assigned->_left = wireList[stoi(item.substr(7))];
+        assigned->_left->_parent = assigned;
+    }
+    else if(item.find("~origtmp") == 0){
+        assigned = assigned->_left = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
+        assigned->_left = wireList[stoi(item.substr(8))];
+        assigned->_left->_parent = assigned;
+    }
+    else if(item.find("in") == 0){
+        int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
+        assigned->_left = inList[idx];
+    }
+    else if(item.find("~in") == 0){
+        assigned = assigned->_left = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
+        int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
+        assigned->_left = inList[idx];
+    }
+    else{
+        clog << "<?> " << item << "\n";
+    }
+
+    item = rightItem;
+    if(item != ""){
+        if(item == "1'b1" || item == "~1'b0"){
+            assigned->_right = bitsetList["1"];
+        }
+        else if(item == "1'b0" || item == "~1'b1"){
+            assigned->_right = bitsetList["0"];
+        }
+        else if(item.find("origtmp") == 0){
+            assigned->_right = wireList[stoi(item.substr(7))];
+            assigned->_right->_parent = assigned;
+        }
+        else if(item.find("~origtmp") == 0){
+            assigned = assigned->_right = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
+            assigned->_right = wireList[stoi(item.substr(8))];
+            assigned->_right->_parent = assigned;
+        }
+        else if(item.find("in") == 0){
+            int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
+            assigned->_right = inList[idx];
+        }
+        else if(item.find("~in") == 0){
+            assigned = assigned->_right = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
+            int idx = stoi(item.substr(item.find('[') + 1, item.find(']') - item.find('[') - 1));
+            assigned->_right = inList[idx];
+        }
+        else{
+            clog << "<?> " << item << "\n";
+        }
+    }
+}
+
 void parser(ifstream &in, ofstream &out){
     out << fixed;
     string line;
@@ -1071,9 +1073,7 @@ void parser(ifstream &in, ofstream &out){
                 // post_order_reduction(it.second);
                 // post_order_reduction(it.second);
             }
-            
-
-            //* equal expression combination
+  
             // for(map<int, Component*>::iterator it = outList.begin(); it != prev(outList.end(), 1);){
             //     map<int, Component*>::iterator left = it;
             //     map<int, Component*>::iterator right = next(it, 1);
@@ -1091,6 +1091,8 @@ void parser(ifstream &in, ofstream &out){
             //     }
             // }
 
+            // * equal expression combination
+            // * equal post order expression
             unordered_map<string, Component*> hashEquation;
             for(unordered_map<int, Component*>::iterator it = wireList.begin(); it != wireList.end(); ++it){
                 if(it->second->_enable){
@@ -1142,12 +1144,6 @@ void parser(ifstream &in, ofstream &out){
                         }
                     }
                 }
-            }
-
-            for(auto &it: outList){
-                post_order_reduction(it.second);
-                // post_order_reduction(it.second);
-                // post_order_reduction(it.second);
             }
             
             //* continuous expression combination
