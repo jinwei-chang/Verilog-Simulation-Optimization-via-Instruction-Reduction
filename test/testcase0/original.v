@@ -3,12 +3,14 @@ module dut (out, in);
 	input[19:0] in;
 	wire origtmp1;
 	wire origtmp2;
-	assign origtmp1 = in[0] ^ in[1];
-	assign origtmp2 = in[5] ^ in[6];
-	assign out[0] = origtmp1 ^ origtmp2;
-	assign out[1] = origtmp2 ^ origtmp1;
-	assign out[2] = in[5] ^ in[6];
-	assign out[3] = in[5] ^ in[6];
+	// assign origtmp1 = in[1] ^ in[3];
+	// assign origtmp2 = in[2] ^ in[4];
+	assign out[0] = in[1] ^ in[3];
+	assign out[1] = in[2] ^ in[4];
+	assign out[2] = ~in[5];
+	assign out[3] = ~in[6];
+    assign out[4] = ~in[7];
+    assign out[5] = ~in[8];
 endmodule
 
 module tb();

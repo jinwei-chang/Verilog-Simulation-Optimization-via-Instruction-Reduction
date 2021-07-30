@@ -50,7 +50,12 @@ struct Component{
         }
         else if(cur->_type == TYPE::IN){
             inst += "in[";
-            inst += to_string(cur->_ID);
+            if(cur->_MSB == cur->_LSB){
+                inst += to_string(cur->_MSB);
+            }
+            else{
+                inst += to_string(cur->_MSB) + ":" + to_string(cur->_LSB);
+            }
             inst += "]";
         }
         else if(cur->_type == TYPE::OUT){
@@ -59,7 +64,7 @@ struct Component{
                 inst += to_string(cur->_MSB);
             }
             else{
-                inst += to_string(cur->_MSB) + ":" + to_string(cur->_LSB);;
+                inst += to_string(cur->_MSB) + ":" + to_string(cur->_LSB);
             }
             inst += "]";
         }
@@ -168,7 +173,9 @@ struct Component{
         NOT,
         OR,
         AND,
-        XOR
+        XOR,
+        ANY,
+        BOP
     };
 
     int _MSB;
@@ -194,7 +201,6 @@ unordered_map<int, const char*> TypeToString = {
 };
 
 // for debug
-
 ostream &operator<<(ostream &out, const Component &right){
     out << "<";
     out << TypeToString[right._type]; 
@@ -288,7 +294,7 @@ void assign(Component *assigned, string leftItem, string rightItem = ""){
 bool search_term(Component *head, Component *term, Component::TYPE parent_type, Component *&term_position){
     if(head == nullptr)
         return false;
-
+    
     if(head->_type == parent_type){
         if(head->_left == term || head->_right == term){
             term_position = head;
@@ -298,9 +304,27 @@ bool search_term(Component *head, Component *term, Component::TYPE parent_type, 
             return false;
         }
     }
-    else if(head->_type == Component::BIT){
+    else if(head->_type == Component::BIT || head->_type == Component::IN){
         return false;
     }
+    else if(parent_type == Component::BOP){
+        if(head->_type == Component::AND || head->_type == Component::OR || head->_type == Component::XOR){
+            if(head->_left == term || head->_right == term){
+                term_position = head;
+                return true;
+            }
+        }
+        else if(head->_type == Component::NOT){
+            return false;
+        }
+    }
+    else if(parent_type == Component::ANY){
+        if(head->_left == term || head->_right == term){
+            term_position = head;
+            return true;
+        }
+    }
+
     return search_term(head->_left, term, parent_type, term_position) || search_term(head->_right, term, parent_type, term_position);
 }
 
@@ -593,6 +617,36 @@ void post_order_reduction(Component *cur){
             cur->_right->_left->_type = Component::NOT;
             cur->_right->_left->_right = nullptr;
         }
+        // * (A xor B xor ... xor *) xor (A xor C xor ... xor *) = B xor ... xor *
+        else if(
+            check_same_op(cur->_left, Component::XOR) &&
+            check_same_op(cur->_right, Component::XOR) &&
+            cur->_left->_type == Component::WIRE &&
+            cur->_right->_type == Component::WIRE
+        ){
+            for(unordered_map<int, Component*>::iterator it = inList.begin(); it != inList.end();){
+                Component *A = it->second;
+                Component *term_position_left = nullptr;
+                Component *term_position_right = nullptr;
+                if(
+                    search_term(cur->_left, A, Component::XOR, term_position_left) && 
+                    search_term(cur->_right, A, Component::XOR, term_position_right)
+                ){
+                    // cout << term_position_left->_parent << endl;
+                    // cout << term_position_right->_parent << endl;
+                    term_position_left->_parent->_left = A == term_position_left->_right ? term_position_left->_left : term_position_left->_right;
+                    assign_parent(term_position_left->_parent->_left, term_position_left->_parent);
+                    post_order_reduction(term_position_left->_parent);
+
+                    term_position_right->_parent->_left = A == term_position_right->_right ? term_position_right->_left : term_position_right->_right;
+                    assign_parent(term_position_right->_parent->_left, term_position_right->_parent);
+                    post_order_reduction(term_position_right->_parent);
+                }
+                else{
+                    ++it;
+                }
+            }
+        }
 
         // * (A xor B) xor (A xor ... xor *) = B xor ... xor *
         // else if(
@@ -631,40 +685,43 @@ void post_order_reduction(Component *cur){
         //     assign_parent(term_position->_parent->_left, term_position->_parent);
         // }
         // * (A xor B xor ... xor *) xor (A xor C xor ... xor *) = B xor ... xor *
-        else if(
-            cur->_left->_type == Component::WIRE &&
-            cur->_left->_left->_type == Component::XOR && (
-                check_same_op(cur->_left, Component::XOR)
-            ) &&
-            cur->_right->_type == Component::WIRE &&
-            cur->_right->_left->_type == Component::XOR && (
-                check_same_op(cur->_right, Component::XOR)
-            )
-        ){
-            for(unordered_map<int, Component*>::iterator it = inList.begin(); it != inList.end();){
-                Component *A = it->second;
-                Component *term_position_left = nullptr;
-                Component *term_position_right = nullptr;
-                if(
-                    search_term(cur->_left, A, Component::XOR, term_position_left) && 
-                    search_term(cur->_right, A, Component::XOR, term_position_right)
-                ){
-                    // cout << term_position_left->_parent << endl;
-                    // cout << term_position_right->_parent << endl;
-                    term_position_left->_parent->_left = A == term_position_left->_right ? term_position_left->_left : term_position_left->_right;
-                    assign_parent(term_position_left->_parent->_left, term_position_left->_parent);
-                    post_order_reduction(term_position_left->_parent);
+        // else if(
+        //     cur->_left->_type == Component::WIRE &&
+        //     cur->_left->_left->_type == Component::XOR && (
+        //         check_same_op(cur->_left, Component::XOR)
+        //     ) &&
+        //     cur->_right->_type == Component::WIRE &&
+        //     cur->_right->_left->_type == Component::XOR && (
+        //         check_same_op(cur->_right, Component::XOR)
+        //     )
+        // ){
+        //     for(unordered_map<int, Component*>::iterator it = inList.begin(); it != inList.end();){
+        //         Component *A = it->second;
+        //         Component *term_position_left = nullptr;
+        //         Component *term_position_right = nullptr;
+        //         if(
+        //             search_term(cur->_left, A, Component::XOR, term_position_left) && 
+        //             search_term(cur->_right, A, Component::XOR, term_position_right)
+        //         ){
+        //             // cout << term_position_left->_parent << endl;
+        //             // cout << term_position_right->_parent << endl;
+        //             term_position_left->_parent->_left = A == term_position_left->_right ? term_position_left->_left : term_position_left->_right;
+        //             assign_parent(term_position_left->_parent->_left, term_position_left->_parent);
+        //             post_order_reduction(term_position_left->_parent);
 
-                    term_position_right->_parent->_left = A == term_position_right->_right ? term_position_right->_left : term_position_right->_right;
-                    assign_parent(term_position_right->_parent->_left, term_position_right->_parent);
-                    post_order_reduction(term_position_right->_parent);
-                }
-                else{
-                    ++it;
-                }
-            }
+        //             term_position_right->_parent->_left = A == term_position_right->_right ? term_position_right->_left : term_position_right->_right;
+        //             assign_parent(term_position_right->_parent->_left, term_position_right->_parent);
+        //             post_order_reduction(term_position_right->_parent);
+        //         }
+        //         else{
+        //             ++it;
+        //         }
+        //     }
             
-        }
+        // }
+
+        
+
     }
 }
 
@@ -808,8 +865,32 @@ void pre_order_combination(Component *left, Component *right, Component *parent 
     if(left == nullptr){
         return;
     }
-    else if(left->_type == Component::TYPE::OUT || left->_type == Component::TYPE::IN){
+    else if(left->_type == Component::TYPE::OUT){
         left->_MSB = right->_MSB;
+    }
+    else if(left->_type == Component::TYPE::IN){
+        if(left == parent->_left){
+            parent->_left = new Component(
+                Component::TYPE::IN,
+                inList.size(),
+                right->_MSB,
+                left->_LSB,
+                nullptr,
+                nullptr,
+                nullptr
+            );
+        }
+        else if(left == parent->_right){
+            parent->_right = new Component(
+                Component::TYPE::IN,
+                inList.size(),
+                right->_MSB,
+                left->_LSB,
+                nullptr,
+                nullptr,
+                nullptr
+            );
+        }
     }
     else if(left->_type == Component::TYPE::BIT){
         string combine = right->_bitset + left->_bitset;
@@ -827,9 +908,6 @@ void pre_order_combination(Component *left, Component *right, Component *parent 
         }
 
         parent->_left = bitsetList[combine];
-    }
-    else{
-        clog << "<?>\n"; 
     }
 
     pre_order_combination(left->_left, right->_left, left);
@@ -1064,6 +1142,12 @@ void parser(ifstream &in, ofstream &out){
                         }
                     }
                 }
+            }
+
+            for(auto &it: outList){
+                post_order_reduction(it.second);
+                // post_order_reduction(it.second);
+                // post_order_reduction(it.second);
             }
             
             //* continuous expression combination

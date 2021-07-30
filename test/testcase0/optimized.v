@@ -1,14 +1,12 @@
 module dut (out, in);
 	output[9:0] out;
 	input[19:0] in;
+	// assign origtmp1 = in[1] ^ in[3];
+	// assign origtmp2 = in[2] ^ in[4];
 	wire xformtmp2;
 	wire xformtmp1;
-	assign xformtmp1 = in[0] ^ in[1];
-	assign xformtmp2 = in[5] ^ in[6];
-	assign out[0] = xformtmp1 ^ xformtmp2;
-	assign out[1] = out[0];
-	assign out[2] = xformtmp2;
-	assign out[3] = xformtmp2;
+	assign out[1:0] = in[2:1] ^ in[4:3];
+	assign out[5:2] = ~in[8:5];
 endmodule
 
 module tb();
