@@ -3,8 +3,8 @@
 if [ "$1" == "" ] 
 then
 
-make
-for n in {1..6};
+make eval
+for n in {0..6};
 do
     ./verilogopt test/testcase$n/original.v test/testcase$n/optimized.v
     ./eval test/testcase$n/original.v test/testcase$n/optimized.v
@@ -15,7 +15,7 @@ done
 elif [ "$1" == "eval" ] 
 then
 
-for n in {1..6};
+for n in {0..6};
 do
     ./eval test/testcase$n/original.v test/testcase$n/optimized.v
     echo finish testcase$n
@@ -24,7 +24,7 @@ done
 
 else
 
-make
+make eval
 ./verilogopt test/$1/original.v test/$1/optimized.v
 ./eval test/$1/original.v test/$1/optimized.v
 echo finish $1
