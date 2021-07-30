@@ -1,9 +1,16 @@
 module dut (out, in);
 	output[1:0] out;
 	input[1:0] in;
-	assign out[0] = ~in[0];
 	wire xformtmp49;
+	wire xformtmp18;
+	wire xformtmp16;
+	wire xformtmp12;
+	wire xformtmp8;
+	wire xformtmp33;
+	wire xformtmp40;
+	wire xformtmp44;
 	assign xformtmp49 = ~in[0];
+	assign out[0] = xformtmp49;
 	assign out[1] = in[1] ^ xformtmp49;
 endmodule
 

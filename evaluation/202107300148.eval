@@ -1,0 +1,59 @@
+<original>
+port: 30
+assign_select: 82
+evaluation: 0.3658536585
+<optimized>
+port: 30
+assign_select: 53
+evaluation: 0.5660377358
+finish testcase1
+
+<original>
+port: 80
+assign_select: 195
+evaluation: 0.4102564103
+<optimized>
+port: 80
+assign_select: 134
+evaluation: 0.5970149254
+finish testcase2
+
+<original>
+port: 230
+assign_select: 569
+evaluation: 0.4042179262
+<optimized>
+port: 230
+assign_select: 366
+evaluation: 0.6284153005
+finish testcase3
+
+<original>
+port: 4
+assign_select: 56
+evaluation: 0.0714285714
+<optimized>
+port: 4
+assign_select: 7
+evaluation: 0.5714285714
+finish testcase4
+
+<original>
+port: 40
+assign_select: 90
+evaluation: 0.4444444444
+<optimized>
+port: 40
+assign_select: 10
+evaluation: 4.0000000000
+finish testcase5
+
+<original>
+port: 2000
+assign_select: 4001000
+evaluation: 0.0004998750
+<optimized>
+port: 2000
+assign_select: 7348
+evaluation: 0.2721829069
+finish testcase6

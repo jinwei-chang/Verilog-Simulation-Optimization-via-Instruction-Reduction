@@ -4,7 +4,7 @@ using namespace std;
 #define RELEASE
 // #define DEBUG
 
-static unordered_set<int> wireOutList;
+static unordered_set<int> wireAssignList;
 
 struct Component{
     Component(
@@ -26,7 +26,8 @@ struct Component{
         _right(right),
         _parent(parent),
         _bitset(bitset),
-        _sharing(sharing)
+        _sharing(sharing),
+        _enable(true)
     {
     }
 
@@ -100,23 +101,57 @@ struct Component{
     string post_order_make_inst(){
         string inst;
 
-        if(_left != nullptr && _left->_type != TYPE::OUT && !_sharing){
+        if(_left != nullptr && _left->_type != TYPE::OUT){
             inst += _left->post_order_make_inst();
         }
-        if(_right != nullptr && _right->_type != TYPE::OUT && !_sharing){
+        if(_right != nullptr && _right->_type != TYPE::OUT){
             inst += _right->post_order_make_inst();
         }
 
-        if(_type == TYPE::WIRE && !wireOutList.count(_ID)){
-            wireOutList.insert(_ID);
+        if(_type == TYPE::WIRE && !wireAssignList.count(_ID)){
+            wireAssignList.insert(_ID);
+            #ifdef DEBUG
             inst += make_wire_inst();
+            #endif
             inst += make_assign_inst();
         }
-        else if(_type == TYPE::OUT){
+        else if(_type == TYPE::OUT && _left != nullptr){
             inst += make_assign_inst();
         }
 
         return inst;
+    }
+
+    string post_order_expression(){
+        string expr;
+
+        if(_left != nullptr){
+            expr += _left->post_order_expression();
+        }
+        if(_right != nullptr){
+            expr += _right->post_order_expression();
+        }
+
+        if(_type == TYPE::IN){
+            expr += "I" + to_string(_ID);
+        }
+        else if(_type == TYPE::NOT){
+            expr += "~";
+        }
+        else if(_type == TYPE::AND){
+            expr += "&";
+        }
+        else if(_type == TYPE::OR){
+            expr += "|";
+        }
+        else if(_type == TYPE::XOR){
+            expr += "^";
+        }
+        else if(_type == TYPE::BIT){
+            expr += "B" + _bitset;
+        }
+
+        return expr;
     }
 
     Component *_left;
@@ -143,6 +178,7 @@ struct Component{
     string _bitset;
 
     bool _sharing;
+    bool _enable;
 };
 
 unordered_map<int, const char*> TypeToString = {
@@ -258,7 +294,9 @@ bool search_term(Component *head, Component *term, Component::TYPE parent_type, 
             term_position = head;
             return true;
         }
-        return false;
+        else if(head->_left->_type != Component::WIRE && head->_right->_type != Component::WIRE){
+            return false;
+        }
     }
     else if(head->_type == Component::BIT){
         return false;
@@ -316,27 +354,33 @@ void post_order_reduction(Component *cur){
             if(cur->_left->_type == Component::TYPE::BIT){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
+                    cur->_enable = false;
                 }
                 else if(cur->_parent->_right == cur){
                     cur->_parent->_right = cur->_left;
+                    cur->_enable = false;
                 }
             }
             else if(cur->_left->_type == Component::TYPE::IN){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
+                    cur->_enable = false;
                 }
                 else if(cur->_parent->_right == cur){
                     cur->_parent->_right = cur->_left;
+                    cur->_enable = false;
                 }
             }
             else if(cur->_left->_type == Component::TYPE::WIRE){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
                     assign_parent(cur->_parent->_left, cur->_parent);
+                    cur->_enable = false;
                 }
                 else if(cur->_parent->_right == cur){
                     cur->_parent->_right = cur->_left;
                     assign_parent(cur->_parent->_right, cur->_parent);
+                    cur->_enable = false;
                 }
             }
             // ! do not mix unary and binary
@@ -348,11 +392,13 @@ void post_order_reduction(Component *cur){
             ){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
+                    cur->_enable = false;
                     // assign_parent(cur->_parent->_left, cur->_parent);
                     // cur->_left = cur;
                 }
                 else if(cur->_parent->_right == cur){
                     cur->_parent->_right = cur->_left;
+                    cur->_enable = false;
                     // assign_parent(cur->_parent->_right, cur->_parent);
                     // cur->_left = cur;
                 }
@@ -509,12 +555,12 @@ void post_order_reduction(Component *cur){
         // * 0 xor A = A
         else if(cur->_left == bitsetList["0"]){
             cur->_parent->_left = cur->_right;
-            if(cur->_right->_type != Component::BIT) cur->_right->_parent = cur->_parent;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
         // * A xor 0 = A
         else if(cur->_right == bitsetList["0"]){
             cur->_parent->_left = cur->_left;
-            if(cur->_left->_type != Component::BIT) cur->_left->_parent = cur->_parent;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
         // * A xor 1 = ~A
         else if(cur->_right == bitsetList["1"]){
@@ -549,40 +595,75 @@ void post_order_reduction(Component *cur){
         }
 
         // * (A xor B) xor (A xor ... xor *) = B xor ... xor *
+        // else if(
+        //     cur->_left->_type == Component::WIRE &&
+        //     cur->_left->_left->_type == Component::XOR &&
+        //     cur->_right->_type == Component::WIRE &&
+        //     cur->_right->_left->_type == Component::XOR && (
+        //         check_same_op(cur->_right, Component::XOR) &&
+        //         search_term(cur->_right, cur->_left->_left->_left, Component::XOR, term_position)
+        //     )
+        // ){
+        //     Component *A = cur->_left->_left->_left;
+        //     Component *B = cur->_left->_left->_right;
+        //     cur->_left = B;
+
+        //     // clog << term_position << endl;
+        //     term_position->_parent->_left = A == term_position->_right ? term_position->_left : term_position->_right;
+        //     assign_parent(term_position->_parent->_left, term_position->_parent);
+        // }
+        // // * (A xor B) xor (B xor ... xor *) = A xor ... xor *
+        // else if(
+        //     cur->_left->_type == Component::WIRE &&
+        //     cur->_left->_left->_type == Component::XOR &&
+        //     cur->_right->_type == Component::WIRE &&
+        //     cur->_right->_left->_type == Component::XOR && (
+        //         check_same_op(cur->_right, Component::XOR) &&
+        //         search_term(cur->_right, cur->_left->_left->_right, Component::XOR, term_position)
+        //     )
+        // ){
+        //     Component *A = cur->_left->_left->_left;
+        //     Component *B = cur->_left->_left->_right;
+        //     cur->_left = A;
+
+        //     // clog << term_position << endl;
+        //     term_position->_parent->_left = B == term_position->_right ? term_position->_left : term_position->_right;
+        //     assign_parent(term_position->_parent->_left, term_position->_parent);
+        // }
+        // * (A xor B xor ... xor *) xor (A xor C xor ... xor *) = B xor ... xor *
         else if(
             cur->_left->_type == Component::WIRE &&
-            cur->_left->_left->_type == Component::XOR &&
+            cur->_left->_left->_type == Component::XOR && (
+                check_same_op(cur->_left, Component::XOR)
+            ) &&
             cur->_right->_type == Component::WIRE &&
             cur->_right->_left->_type == Component::XOR && (
-                check_same_op(cur->_right, Component::XOR) &&
-                search_term(cur->_right, cur->_left->_left->_left, Component::XOR, term_position)
+                check_same_op(cur->_right, Component::XOR)
             )
         ){
-            Component *A = cur->_left->_left->_left;
-            Component *B = cur->_left->_left->_right;
-            cur->_left = B;
+            for(unordered_map<int, Component*>::iterator it = inList.begin(); it != inList.end();){
+                Component *A = it->second;
+                Component *term_position_left = nullptr;
+                Component *term_position_right = nullptr;
+                if(
+                    search_term(cur->_left, A, Component::XOR, term_position_left) && 
+                    search_term(cur->_right, A, Component::XOR, term_position_right)
+                ){
+                    // cout << term_position_left->_parent << endl;
+                    // cout << term_position_right->_parent << endl;
+                    term_position_left->_parent->_left = A == term_position_left->_right ? term_position_left->_left : term_position_left->_right;
+                    assign_parent(term_position_left->_parent->_left, term_position_left->_parent);
+                    post_order_reduction(term_position_left->_parent);
 
-            // clog << term_position << endl;
-            term_position->_parent->_left = A == term_position->_right ? term_position->_left : term_position->_right;
-            assign_parent(term_position->_parent->_left, term_position->_parent);
-        }
-        // * (A xor B) xor (B xor ... xor *) = A xor ... xor *
-        else if(
-            cur->_left->_type == Component::WIRE &&
-            cur->_left->_left->_type == Component::XOR &&
-            cur->_right->_type == Component::WIRE &&
-            cur->_right->_left->_type == Component::XOR && (
-                check_same_op(cur->_right, Component::XOR) &&
-                search_term(cur->_right, cur->_left->_left->_right, Component::XOR, term_position)
-            )
-        ){
-            Component *A = cur->_left->_left->_left;
-            Component *B = cur->_left->_left->_right;
-            cur->_left = A;
-
-            // clog << term_position << endl;
-            term_position->_parent->_left = B == term_position->_right ? term_position->_left : term_position->_right;
-            assign_parent(term_position->_parent->_left, term_position->_parent);
+                    term_position_right->_parent->_left = A == term_position_right->_right ? term_position_right->_left : term_position_right->_right;
+                    assign_parent(term_position_right->_parent->_left, term_position_right->_parent);
+                    post_order_reduction(term_position_right->_parent);
+                }
+                else{
+                    ++it;
+                }
+            }
+            
         }
     }
 }
@@ -671,23 +752,25 @@ bool combine_equal(Component *left, Component *right){
     term_set_left.clear();
     term_set_right.clear();
 
-    // if(check_equal_alternative(left, right)){
-    //     if(xor_op == xor_op + and_op + or_op && term_set_left == term_set_right){
-    //         left->_left = right;
-    //         left->_sharing = true;
-    //     }
-    //     else{
-    //         // clog << (xor_op == xor_op + and_op + or_op) << endl;
-    //         // clog << (term_set_left == term_set_right) << endl;
-    //     }
+    if(check_equal_alternative(left, right)){
+        if(xor_op == xor_op + and_op + or_op && term_set_left == term_set_right){
+            left->_left = right;
+            left->_sharing = true;
+        }
+        else{
+            // clog << (xor_op == xor_op + and_op + or_op) << endl;
+            // clog << (term_set_left == term_set_right) << endl;
+        }
 
-    //     return true;
-    // }
-    // else 
-    if(check_equal(left, right)){
+        return true;
+    }
+    else if(check_equal(left, right)){
+        cout << "combine!" << endl;
+        cout << left->_ID << " " << right->_ID << endl;
         left->_left = right;
         left->_sharing = true;
     }
+    // cout << left->_ID << " " << right->_ID << endl;
 
     return false;
 }
@@ -756,7 +839,7 @@ void pre_order_combination(Component *left, Component *right, Component *parent 
 bool expression_combination(Component *left, Component *right){
     if(check_combinable(left, right)){
         #ifdef DEBUG
-        clog << "yes: " << left->_ID << " " << right->_ID << "\n";
+        // clog << "yes: " << left->_ID << " " << right->_ID << "\n";
         #endif
 
         pre_order_combination(left, right);
@@ -765,7 +848,7 @@ bool expression_combination(Component *left, Component *right){
     }
     else{
         #ifdef DEBUG
-        clog << "no: " << left->_ID << " " << right->_ID << "\n";
+        // clog << "no: " << left->_ID << " " << right->_ID << "\n";
         #endif
     }
         
@@ -880,9 +963,20 @@ void parser(ifstream &in, ofstream &out){
                     }
                     else{
                         swap(item1, item2);
-                    }
-                    
+                    } 
                 }
+                // else if(
+                //     (item1.find("origtmp") == 0 || item1.find("~origtmp") == 0) &&
+                //     (item2.find("origtmp") == 0 || item2.find("~origtmp") == 0) 
+                // ){
+                //     int idx1 = stoi(item1.substr(7));
+                //     int idx2 = stoi(item2.substr(7));
+                //     if(idx2 < idx1){
+                //         swap(item1, item2);
+                //     }
+                // }
+
+
                 assign(opr, item1, item2);
 
                 L->_left = opr;
@@ -890,22 +984,16 @@ void parser(ifstream &in, ofstream &out){
 
         }
         else if(kw == "endmodule" && !opt){
-            #ifdef DEBUG
-            // clog << "<Debug> Before" << endl;
-            // for(auto &it: outList){
-            //     clog << *it.second << "\n";
-            // }
-            #endif
-            
             opt = true;
 
             //* optimize
             //* Post-order Reduction
             for(auto &it: outList){
                 post_order_reduction(it.second);
-                post_order_reduction(it.second);
+                // post_order_reduction(it.second);
                 // post_order_reduction(it.second);
             }
+            
 
             //* equal expression combination
             // for(map<int, Component*>::iterator it = outList.begin(); it != prev(outList.end(), 1);){
@@ -913,13 +1001,71 @@ void parser(ifstream &in, ofstream &out){
             //     map<int, Component*>::iterator right = next(it, 1);
                 
             //     combine_equal(left->second, right->second);
-            //     for(auto &jt: wireList){
-            //         combine_equal(jt.second, left->second);
-            //         combine_equal(jt.second, right->second);
-            //     }
+                
             //     ++it;
             // }
 
+            // for(unordered_map<int, Component*>::iterator it = wireList.begin(); it != wireList.end(); ++it){
+            //     for(unordered_map<int, Component*>::iterator jt = it; jt != wireList.end(); ++jt){
+            //         if(it != jt && it->second->_enable && jt->second->_enable){
+            //             combine_equal(it->second, jt->second);
+            //         }
+            //     }
+            // }
+
+            unordered_map<string, Component*> hashEquation;
+            for(unordered_map<int, Component*>::iterator it = wireList.begin(); it != wireList.end(); ++it){
+                if(it->second->_enable){
+                    string expr = it->second->post_order_expression();
+                    if(!hashEquation.count(expr)){
+                        hashEquation[expr] = it->second;
+                    }
+                    else{
+                        // combine_equal(it->second, hashEquation[it->second->post_order_expression()]);
+                        // cout << it->second->post_order_expression() << endl;
+                        // it->second->_sharing = true;
+                        it->second->_left = hashEquation[expr]->_left;
+                    }
+                }
+            }
+            for(map<int, Component*>::iterator it = outList.begin(); it != outList.end(); ++it){
+                if(it->second->_enable){
+                    string expr = it->second->post_order_expression();
+                    
+                    if(!hashEquation.count(expr)){
+                        // cout << expr << endl;
+                        hashEquation[expr] = it->second;
+                    }
+                    else if(expr.find("I") != -1){
+                        // combine_equal(it->second, hashEquation[it->second->post_order_expression()]);
+                        // cout << it->second->post_order_expression() << endl;
+                        // it->second->_sharing = true;
+                        if(hashEquation[expr]->_left->_type == Component::IN){
+                            it->second->_left = hashEquation[expr];
+                        }
+                        else if(hashEquation[expr]->_left->_type == Component::NOT && hashEquation[expr]->_left->_left->_type == Component::IN){
+                            it->second->_left = hashEquation[expr];
+                        }
+                        else if(
+                            (
+                                hashEquation[expr]->_left->_type == Component::AND ||
+                                hashEquation[expr]->_left->_type == Component::OR ||
+                                hashEquation[expr]->_left->_type == Component::XOR
+                            ) &&
+                            (
+                                hashEquation[expr]->_left->_left->_type == Component::IN &&
+                                hashEquation[expr]->_left->_right->_type == Component::IN
+                            )
+                        ){
+                            it->second->_left = hashEquation[expr];
+                        }
+                        else{
+                            it->second->_left = hashEquation[expr]->_left;
+                        }
+                    }
+                }
+            }
+            
             //* continuous expression combination
             for(map<int, Component*>::iterator it = outList.begin(); it != prev(outList.end(), 1);){
                 map<int, Component*>::iterator left = it;
@@ -931,29 +1077,27 @@ void parser(ifstream &in, ofstream &out){
             }
 
             //* output result
-            // #ifdef DEBUG
+            #ifdef DEBUG
             for(auto &it: outList){
                 out << it.second->post_order_make_inst();
             }
-            // #endif
-
-            // for(auto &it: wireList){
-            //     out << it.second->make_wire_inst();
-            // }
-            // for(auto &it: outList){
-            //     out << it.second->make_assign_inst();
-            // }
-            // for(auto &it: wireList){
-            //     out << it.second->make_assign_inst();
-            // }
-
-            #ifdef DEBUG
-            // clog << "<Debug> After" << endl;
-            // for(auto &it: outList){
-            //     clog << *it.second << "\n";
-            // }
             #endif
 
+            #ifdef RELEASE
+            for(auto &it: wireList){
+                if(it.second->_enable)
+                    out << it.second->make_wire_inst();
+            }
+            for(auto &it: outList){
+                out << it.second->post_order_make_inst();
+            }
+            #endif
+            // for(auto &it: outList){
+            //     out << it.second->make_assign_inst();
+            // }
+            // for(auto &it: wireList){
+            //     out << it.second->make_assign_inst();
+            // }
             out << line << "\n";
         }
         else{
