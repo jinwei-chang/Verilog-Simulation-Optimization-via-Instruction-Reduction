@@ -1,8 +1,8 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#define RELEASE
-// #define DEBUG
+// #define RELEASE
+#define DEBUG
 
 static unordered_set<int> wireAssignList;
 
@@ -104,6 +104,35 @@ struct Component{
     }
 
     string post_order_make_inst(){
+        #ifdef DEBUG
+        if(_parent != nullptr){
+            if(_parent->_left != this && _parent->_right != this){
+                clog << "<error> parent error" << endl;
+                clog << "<";
+                clog << _type; 
+                clog << "> ";
+                clog << _ID;
+                clog << endl;
+                clog << " parent: <" << _parent->_type << "> ";
+                clog << _parent->_ID;
+                clog << endl;
+            }
+        }
+
+        if(_left != nullptr && _left->_type != TYPE::IN && _left->_type != TYPE::BIT){
+            if(_left->_parent != this){
+                clog << "<error> left child parent error" << endl;
+            }
+        }
+
+        if(_right != nullptr && _right->_type != TYPE::IN && _right->_type != TYPE::BIT){
+            if(_right->_parent != this){
+                clog << "<error> right child parent error" << endl;
+            }
+        }
+        
+        #endif
+
         string inst;
 
         if(_left != nullptr && _left->_type != TYPE::OUT){
@@ -227,9 +256,6 @@ static unordered_map<string, Component*> bitsetList;
 
 static map<int, Component*> outList;
 
-
-
-
 bool search_term(Component *head, Component *term, Component::TYPE parent_type, Component *&term_position){
     if(head == nullptr)
         return false;
@@ -300,6 +326,8 @@ void assign_parent(Component *assigned, Component *parent){
 void post_order_reduction(Component *cur){
     if(cur->_type == Component::TYPE::BIT || cur->_type == Component::TYPE::IN)
         return;
+
+    // clog << cur->_ID << endl;
     
     if(cur->_left != nullptr){
         post_order_reduction(cur->_left);
@@ -313,24 +341,27 @@ void post_order_reduction(Component *cur){
     }
     else if(cur->_type == Component::TYPE::WIRE){
         if(cur->_parent != nullptr){
-            
             if(cur->_left->_type == Component::TYPE::BIT){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
+                    assign_parent(cur->_parent->_left, cur->_parent);
                     cur->_enable = false;
                 }
                 else if(cur->_parent->_right == cur){
                     cur->_parent->_right = cur->_left;
+                    assign_parent(cur->_parent->_right, cur->_parent);
                     cur->_enable = false;
                 }
             }
             else if(cur->_left->_type == Component::TYPE::IN){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
+                    assign_parent(cur->_parent->_left, cur->_parent);
                     cur->_enable = false;
                 }
                 else if(cur->_parent->_right == cur){
                     cur->_parent->_right = cur->_left;
+                    assign_parent(cur->_parent->_right, cur->_parent);
                     cur->_enable = false;
                 }
             }
@@ -355,17 +386,23 @@ void post_order_reduction(Component *cur){
             ){
                 if(cur->_parent->_left == cur){
                     cur->_parent->_left = cur->_left;
+                    assign_parent(cur->_parent->_left, cur->_parent);
                     cur->_enable = false;
                     // assign_parent(cur->_parent->_left, cur->_parent);
                     // cur->_left = cur;
                 }
                 else if(cur->_parent->_right == cur){
                     cur->_parent->_right = cur->_left;
+                    assign_parent(cur->_parent->_right, cur->_parent);
                     cur->_enable = false;
                     // assign_parent(cur->_parent->_right, cur->_parent);
                     // cur->_left = cur;
                 }
             }
+            // else if(cur->_left->_type == Component::TYPE::NOT){
+            //     clog << cur->_ID << endl;
+            //     clog << cur->_parent->_type << endl;
+            // }
         }
     }
     else if(cur->_type == Component::TYPE::NOT){
@@ -403,10 +440,12 @@ void post_order_reduction(Component *cur){
         // * 0 or A = A
         if(cur->_left == bitsetList["0"]){
             cur->_parent->_left = cur->_right;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
         // * A or 0 = A
         else if(cur->_right == bitsetList["0"]){
             cur->_parent->_left = cur->_left;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
         // * 0 or 1 = 1
         // * 1 or 0 = 1
@@ -425,6 +464,7 @@ void post_order_reduction(Component *cur){
         // * A or A = A
         else if(*cur->_left == *cur->_right){
             cur->_parent->_left = cur->_left;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
 
         // * A or (A and B) = A
@@ -436,6 +476,7 @@ void post_order_reduction(Component *cur){
             )
             ){
             cur->_parent->_left = cur->_left;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
     }
     else if(cur->_type == Component::TYPE::AND){
@@ -449,10 +490,12 @@ void post_order_reduction(Component *cur){
         // * 1 and A = A
         else if(cur->_left == bitsetList["1"]){
             cur->_parent->_left = cur->_right;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
         // * A and 1 = A
         else if(cur->_right == bitsetList["1"]){
             cur->_parent->_left = cur->_left;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
         // * 0 and 0 = 0
         // * 0 and 1 = 0
@@ -471,6 +514,7 @@ void post_order_reduction(Component *cur){
         // * A and A = A
         else if(*cur->_left == *cur->_right){
             cur->_parent->_left = cur->_left;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
 
         // * (A and B) and A = A and B
@@ -487,6 +531,7 @@ void post_order_reduction(Component *cur){
             )
         ){
             cur->_parent->_left = cur->_left;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
         // * (A or *) and (A and B) = A and B
         // * (B or *) and (A and B) = A and B
@@ -499,6 +544,7 @@ void post_order_reduction(Component *cur){
             )
         ){
             cur->_parent->_left = cur->_right;
+            assign_parent(cur->_parent->_left, cur->_parent);
         }
     }
     else if(cur->_type == Component::TYPE::XOR){
@@ -527,19 +573,35 @@ void post_order_reduction(Component *cur){
         }
         // * A xor 1 = ~A
         else if(cur->_right == bitsetList["1"]){
-            cur->_parent->_left->_type = Component::NOT;
-            cur->_parent->_left->_left = cur->_left;
-            cur->_parent->_left->_right = nullptr;
+            cur->_type = Component::NOT;
+            cur->_left = cur->_left;
+            cur->_right = nullptr;
             
             // if(cur->_left->_type != Component::BIT) cur->_left->_parent = cur->_parent;
         }
         // * 1 xor A = ~A
         else if(cur->_left == bitsetList["1"]){
-            cur->_parent->_left->_type = Component::NOT;
-            cur->_parent->_left->_left = cur->_right;
-            cur->_parent->_left->_right = nullptr;
+            cur->_type = Component::NOT;
+            cur->_left = cur->_right;
+            cur->_right = nullptr;
 
             // if(cur->_right->_type != Component::BIT) cur->_right->_parent = cur->_parent;
+        }
+        // * A xor ~ A = 1
+        else if(
+            cur->_right->_type == Component::WIRE &&
+            cur->_right->_left->_type == Component::NOT &&
+            cur->_left == cur->_right->_left->_left
+        ){
+            cur->_parent->_left = bitsetList["1"];
+        }
+        // * ~ A xor A = 1
+        else if(
+            cur->_left->_type == Component::WIRE &&
+            cur->_left->_left->_type == Component::NOT &&
+            cur->_left->_left->_left == cur->_right
+        ){
+            cur->_parent->_left = bitsetList["1"];
         }
         
         // * A xor (A + B) = not A and B
@@ -882,12 +944,25 @@ void assign(Component *assigned, string leftItem, string rightItem = ""){
         assigned->_left = bitsetList["0"];
     }
     else if(item.find("origtmp") == 0){
-        assigned->_left = wireList[stoi(item.substr(7))];
+        Component *wire = wireList[stoi(item.substr(7))];
+        if(wire->_parent != nullptr){
+            int id = wireList.size();
+            wire = new Component(Component::TYPE::WIRE, id, 0, 0, wire, nullptr);
+            wireList.insert(make_pair( id, wire ));
+        }
+        assigned->_left = wire;
         assigned->_left->_parent = assigned;
     }
     else if(item.find("~origtmp") == 0){
         assigned = assigned->_left = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
-        assigned->_left = wireList[stoi(item.substr(8))];
+
+        Component *wire = wireList[stoi(item.substr(8))];
+        if(wire->_parent != nullptr){
+            int id = wireList.size();
+            wire = new Component(Component::TYPE::WIRE, id, 0, 0, wire, nullptr);
+            wireList.insert(make_pair( id, wire ));
+        }
+        assigned->_left = wire;
         assigned->_left->_parent = assigned;
     }
     else if(item.find("in") == 0){
@@ -912,12 +987,25 @@ void assign(Component *assigned, string leftItem, string rightItem = ""){
             assigned->_right = bitsetList["0"];
         }
         else if(item.find("origtmp") == 0){
-            assigned->_right = wireList[stoi(item.substr(7))];
+            Component *wire = wireList[stoi(item.substr(7))];
+            if(wire->_parent != nullptr){
+                int id = wireList.size();
+                wire = new Component(Component::TYPE::WIRE, id, 0, 0, wire, nullptr);
+                wireList.insert(make_pair( id, wire ));
+            }
+            assigned->_right = wire;
             assigned->_right->_parent = assigned;
         }
         else if(item.find("~origtmp") == 0){
             assigned = assigned->_right = new Component(Component::TYPE::NOT, 0, 0, 0, nullptr, nullptr, assigned);
-            assigned->_right = wireList[stoi(item.substr(8))];
+            
+            Component *wire = wireList[stoi(item.substr(8))];
+            if(wire->_parent != nullptr){
+                int id = wireList.size();
+                wire = new Component(Component::TYPE::WIRE, id, 0, 0, wire, nullptr);
+                wireList.insert(make_pair( id, wire ));
+            }
+            assigned->_right = wire;
             assigned->_right->_parent = assigned;
         }
         else if(item.find("in") == 0){
@@ -990,12 +1078,12 @@ void parser(ifstream &in, ofstream &out){
             Component *L;
             
             if(lhs.substr(0, 3) == "out"){
-                // out[#]
+                //* out[#]
                 int idx = stoi(lhs.substr(lhs.find('[') + 1, lhs.find(']') - lhs.find('[') - 1));
                 L = outList[idx];
             }
             else{
-                // origtmp#
+                //* origtmp#
                 int idx = stoi(lhs.substr(7));
                 L = wireList[idx];
             }

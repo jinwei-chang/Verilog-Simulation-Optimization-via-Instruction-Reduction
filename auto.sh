@@ -4,7 +4,7 @@ if [ "$1" == "" ]
 then
 
 make eval
-for n in {0..6};
+for n in {0..5};
 do
     ./verilogopt test/testcase$n/original.v test/testcase$n/optimized.v
     ./eval test/testcase$n/original.v test/testcase$n/optimized.v
@@ -15,7 +15,7 @@ done
 elif [ "$1" == "eval" ] 
 then
 
-for n in {0..6};
+for n in {0..5};
 do
     ./eval test/testcase$n/original.v test/testcase$n/optimized.v
     echo finish testcase$n
