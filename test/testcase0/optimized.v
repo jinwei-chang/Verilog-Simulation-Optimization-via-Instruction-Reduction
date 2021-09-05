@@ -1,8 +1,6 @@
 module dut (out, in);
 	output[9:0] out;
 	input[19:0] in;
-	// assign origtmp1 = in[1] ^ in[3];
-	// assign origtmp2 = in[2] ^ in[4];
 	assign out[1:0] = in[2:1] ^ in[4:3];
 	assign out[5:2] = ~in[8:5];
 endmodule

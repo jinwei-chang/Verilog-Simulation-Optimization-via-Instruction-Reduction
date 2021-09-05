@@ -1,14 +1,10 @@
 module dut (out, in);
 	output[1:0] out;
 	input[1:0] in;
-	wire xformtmp7;
-	assign xformtmp7 = in[0];
-	assign out[0] = ~xformtmp7;
-	wire xformtmp49;
-	assign xformtmp49 = ~in[0];
-	wire xformtmp50;
-	assign xformtmp50 = xformtmp49;
-	assign out[1] = in[1] ^ xformtmp50;
+	assign out[0] = ~in[0];
+	wire xformtmp51;
+	assign xformtmp51 = ~in[0];
+	assign out[1] = in[1] ^ xformtmp51;
 endmodule
 
 module tb();

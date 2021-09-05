@@ -2,26 +2,39 @@
 
 if [ "$1" == "" ] 
 then
+    make eval
+    for n in {0..10};
+    do
+        if [ $n == 6 ] 
+        then 
+        continue
+        fi
 
-make eval
-for n in {0..5};
-do
-    ./verilogopt test/testcase$n/original.v test/testcase$n/optimized.v
-    ./eval test/testcase$n/original.v test/testcase$n/optimized.v
-    echo finish testcase$n
-    echo
-done
-
+        ./verilogopt test/testcase$n/original.v test/testcase$n/optimized.v
+        ./eval test/testcase$n/original.v test/testcase$n/optimized.v
+        echo finish testcase$n
+        echo
+    done
 elif [ "$1" == "eval" ] 
 then
+    if [ "$2" == "" ] 
+    then
+        for n in {0..10};
+        do
+            if [ $n == 6 ]
+            then 
+            continue 
+            fi
 
-for n in {0..5};
-do
-    ./eval test/testcase$n/original.v test/testcase$n/optimized.v
-    echo finish testcase$n
-    echo
-done
-
+            ./eval test/testcase$n/original.v test/testcase$n/optimized.v
+            echo finish testcase$n
+            echo
+        done
+    else
+        ./eval test/$2/original.v test/$2/optimized.v
+        echo finish $2
+        echo
+    fi
 else
 
 make eval
